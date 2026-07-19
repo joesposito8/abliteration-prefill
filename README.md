@@ -27,8 +27,7 @@ export OPENAI_API_KEY=...     # only for the live tests / smoke script
 
 ```bash
 uv run pytest -m "not live" -v            # offline, no API calls
-uv run python scripts/smoke_grade.py      # 1 gpt-4o-mini call
-uv run pytest -m live -v                   # 2 gpt-4o-mini calls
+uv run pytest -m live -v                    # live: 2 gpt-4o-mini calls
 ```
 
 ## Usage
