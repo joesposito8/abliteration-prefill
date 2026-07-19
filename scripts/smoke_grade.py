@@ -1,6 +1,5 @@
-"""Smoke test: one cheap gpt-4o-mini call through the grader.
+"""Smoke test: one gpt-4o-mini call through the grader (makes one API call).
 
-PAID: makes exactly one OpenAI API call. Run only with explicit approval.
     uv run python scripts/smoke_grade.py
 """
 

@@ -1,4 +1,4 @@
-"""S1 grading environment: StrongREJECT rubric grader + prefill-stripping hook."""
+"""StrongREJECT rubric grader and prefill-stripping hook."""
 
 from .prefill import count_tokens, grade_stripped, is_degenerate, strip_prefill
 from .strongreject_grader import GradeResult, grade, parse_grader_output

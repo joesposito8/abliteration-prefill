@@ -1,7 +1,7 @@
 [project]
-name = "abliteration-prefill-grading"
+name = "strongreject-grading"
 version = "0.1.0"
-description = "S1 StrongREJECT grading environment (gpt-4o-mini, API-only)"
+description = "StrongREJECT rubric grader (gpt-4o-mini) with a prefill-stripping hook"
 requires-python = ">=3.10"
 dependencies = [
     "openai>=1.0",

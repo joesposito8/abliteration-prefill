@@ -3,10 +3,9 @@
 Makes real gpt-4o-mini calls, so it is marked ``live`` and skipped unless
 OPENAI_API_KEY is set. Run explicitly: ``uv run pytest -m live``.
 
-This is a direction spot-check, NOT T1's formal autograder-vs-human validation.
-The vendored ``example_graded_answers.csv`` contains only AIM-jailbreak responses
-(compliances); it has no genuine refusals, so the refusal direction is checked
-with a constructed canonical refusal.
+A direction spot-check, not a full autograder-vs-human validation. The vendored
+``example_graded_answers.csv`` holds only jailbreak (compliant) responses, so the
+refusal direction is checked with a constructed refusal.
 """
 
 import os
