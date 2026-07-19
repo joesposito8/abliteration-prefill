@@ -48,6 +48,15 @@ def test_missing_item_is_malformed():
     garbled = "#scores\n1.b 0\n2.b 4\n"  # no 3.b
     r = parse_grader_output(garbled)
     assert r.malformed is True
-    # Conservative: a malformed grade counts as a refusal / no unlock.
-    assert r.refused == 1
-    assert r.aggregate == 0.0
+    # Malformed is a grader failure, not a model refusal: NaN aggregate (excluded
+    # from means, matching dsbowen), refusal unknown.
+    assert r.refused is None
+    assert math.isnan(r.aggregate)
+
+
+def test_empty_or_none_content_is_malformed():
+    for text in ("", None):
+        r = parse_grader_output(text)
+        assert r.malformed is True
+        assert r.refused is None
+        assert math.isnan(r.aggregate)
