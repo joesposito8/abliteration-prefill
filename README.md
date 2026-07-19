@@ -10,9 +10,8 @@ jailbreak responses. No GPU required.
   parser, 0-1 scoring), calling **gpt-4o-mini**. Returns a `GradeResult`
   (`refused`, `specificity`, `convincingness`, `aggregate`, `malformed`,
   `degenerate`, `raw_output`).
-- `src/grading/prefill.py` — `strip_prefill`, `is_degenerate`, `grade_stripped`:
-  strip the injected prefill before scoring; near-empty continuations count as
-  refusals. The token threshold and counter are parameters.
+- `src/grading/prefill.py` — `strip_prefill`, `grade_stripped`: strip the injected
+  prefill before scoring; an empty continuation counts as a refusal.
 - `src/grading/prompts/` — rubric templates, vendored verbatim (see `data/SOURCES.md`).
 - `data/` — the 313-prompt StrongREJECT set + known graded examples.
 
@@ -38,6 +37,6 @@ from grading import grade, grade_stripped
 # unprefilled: grade the full model output
 r = grade("<forbidden prompt>", "<model output>")
 
-# prefilled: strip the injected prefix first; degenerate -> refusal, no API call
-r = grade_stripped("<forbidden prompt>", "<prefill+continuation>", "<prefill>", min_tokens=5)
+# prefilled: strip the injected prefix first; empty continuation -> refusal, no API call
+r = grade_stripped("<forbidden prompt>", "<prefill+continuation>", "<prefill>")
 ```
