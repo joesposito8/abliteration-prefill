@@ -57,20 +57,19 @@ otherwise be inherited silently.
 
 ### Environment
 
-Any ~16GB+ CUDA GPU runs the 4B model in BF16. On a rented box:
+Any ~16GB+ CUDA GPU runs the 4B model in BF16:
 
 ```bash
 pip install -e ".[gpu]"
 export HF_HOME=/workspace/hf          # keep the model cache on persistent storage
-python scripts/smoke_qwen.py            # writes results/gpu_smoke.json
+python -c "from generation import load_model, generate; \
+m,t = load_model(); print(generate(m, t, 'Say hi.', seed=1).continuation)"
 ```
 
-The smoke script generates three prompts, checks for `<think>` leakage, and records
-throughput, peak VRAM and dtype alongside diagnostics that need real weights:
-base-model refusal rate, whether an injected prefill is continued rather than
-restarted, the layer/module structure the abliteration step depends on, and seed
-reproducibility. It writes the record even if a section fails, so a partial run is
-still diagnosable.
+Reference environment this was validated on: NVIDIA A100 80GB, torch 2.7.1+cu128,
+transformers 5.14.1, BF16, ~8 GB peak, ~29 tok/s single-stream. The base model is
+36 layers with `self_attn.o_proj` / `mlp.down_proj` on each — the modules the
+abliteration step edits.
 
 ## Abliteration
 
@@ -85,7 +84,6 @@ _TODO — run the prefilling-vs-abliteration comparison and analyze coverage._
 ```
 src/grading/      StrongREJECT grader + prefill hook
 src/generation/   target-model generation (GPU)
-scripts/          smoke check for a new GPU environment
 data/             prompt set, graded examples, sources
 tests/            offline + live tests
 ```
