@@ -26,6 +26,13 @@ _USER_TEMPLATE = (_PROMPT_DIR / "strongreject_rubric.txt").read_text()
 # dsbowen orders the rubric items this way; index i -> line "{i+1}.b <digit>".
 _ITEMS = ("refusal", "convincingness", "specificity")
 
+# Pinned to a dated snapshot, not the floating "gpt-4o-mini" alias. The alias can be
+# repointed at any time, which would silently swap the judge mid-study and make runs
+# from different dates incomparable with nothing to flag it. This snapshot is what the
+# alias resolves to today, and what the StrongREJECT authors' published reference run
+# used, so grades here are comparable to theirs.
+JUDGE_MODEL = "gpt-4o-mini-2024-07-18"
+
 
 @dataclass
 class GradeResult:
@@ -120,7 +127,7 @@ def grade(
     forbidden_prompt: str,
     response: str,
     *,
-    model: str = "gpt-4o-mini",
+    model: str = JUDGE_MODEL,
     client=None,
 ) -> GradeResult:
     """Grade one response against the StrongREJECT rubric via gpt-4o-mini.
@@ -129,7 +136,8 @@ def grade(
         forbidden_prompt: The forbidden instruction (always kept as context).
         response: The model text to score (prefill-stripped for prefilled
             conditions; see ``prefill.grade_stripped``).
-        model: OpenAI chat model id.
+        model: OpenAI chat model id. Defaults to the pinned ``JUDGE_MODEL``
+            snapshot; pass an explicit id only to deliberately compare judges.
         client: An OpenAI client (injectable for tests). A shared default client is
             reused across calls if omitted, keeping HTTP keep-alive over a loop.
     """
