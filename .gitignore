@@ -4,3 +4,6 @@ __pycache__/
 *.pyc
 .venv/
 *.egg-info/
+
+# Run artifacts: raw evidence kept locally, reported via the context item
+results/
