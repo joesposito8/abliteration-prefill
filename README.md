@@ -74,8 +74,7 @@ abliteration step edits.
 ## Abliteration
 
 Difference-of-means refusal-direction weight editing (Arditi et al. 2024,
-arXiv:2406.11717), ported from `andyrdt/refusal_direction` to plain HuggingFace forward
-passes. Requires a GPU.
+arXiv:2406.11717), ported from `andyrdt/refusal_direction`. Requires a GPU.
 
 ```python
 from generation import load_model
@@ -85,21 +84,18 @@ from abliteration import (
 )
 
 model, tok = load_model()
-harmful, harmless = load_extraction()                       # 256 + 256, vendored
-h = collect_mean_last_token_states(model, tok, harmful)     # float64 mean per layer
-hl = collect_mean_last_token_states(model, tok, harmless)
-directions = refusal_directions(h, hl)                      # [n_layers, d_model], unit
-
-with abliterated(model, directions[22]):                    # reconstruct-on-demand
-    gen = generate(model, tok, load_eval()[0], seed=1)      # base restored on exit
+harmful, harmless = load_extraction()                   # 256 + 256, vendored
+directions = refusal_directions(                        # [n_layers, d_model], unit
+    collect_mean_last_token_states(model, tok, harmful),
+    collect_mean_last_token_states(model, tok, harmless),
+)
+with abliterated(model, directions[22]):                # base weights restored on exit
+    gen = generate(model, tok, load_eval()[0], seed=1)
 ```
 
-`collect_mean_last_token_states` takes the last-token hidden state at every layer
-(left-padded, float64) in one forward pass, so `refusal_directions` yields a direction
-for every layer at once. `abliterated` orthogonalizes the token embedding and every
-layer's `o_proj`/`down_proj` against the direction, then restores the base weights on
-exit — no edited checkpoint is persisted. The contrast and held-out evaluation prompt
-subsets are vendored under `data/` (see `data/SOURCES.md`).
+`abliterated` orthogonalizes `embed_tokens` and every layer's `o_proj`/`down_proj`
+against the direction, then restores the base weights — no edited checkpoint is
+persisted. Prompt subsets are vendored under `data/` (see `data/SOURCES.md`).
 
 ## Evaluation
 
