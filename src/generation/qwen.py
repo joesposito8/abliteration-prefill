@@ -85,6 +85,10 @@ def contains_thinking(text: str) -> bool:
 def build_prompt(tokenizer, message: str, prefill: str = "") -> str:
     """Render one user turn as a prompt, with an optional assistant-side prefill.
 
+    A prefill should not end in whitespace: the trailing space becomes its own token,
+    which is not how the same text would tokenize during natural generation, and the
+    continuation degrades for that condition only.
+
     Raises:
         ValueError: if the rendered prompt does not end with the thinking sentinel,
             which means thinking mode is live and a prefill would be placed inside
@@ -119,13 +123,26 @@ def load_model(model_id: str = MODEL_ID, revision: str = REVISION):
 
 
 def _decode(tokenizer, token_ids, pad_token_id):
-    """Decode one row to (clean, raw, new_token_count)."""
-    new_tokens = int((token_ids != pad_token_id).sum())
+    """Decode one row of generated tokens to ``(clean, raw, new_token_count)``.
+
+    Rows that stop early are filled with the pad token, so the tail is cut before
+    decoding; otherwise ``raw`` would carry hundreds of literal pad strings and any
+    control-token check over it would be useless. A row whose own final token is the
+    pad token is undercounted by one, which is within tolerance for these numbers.
+    """
+    pad_positions = (token_ids == pad_token_id).nonzero()
+    end = int(pad_positions[0]) if len(pad_positions) else len(token_ids)
+    generated = token_ids[:end]
     return (
-        tokenizer.decode(token_ids, skip_special_tokens=True),
-        tokenizer.decode(token_ids, skip_special_tokens=False),
-        new_tokens,
+        tokenizer.decode(generated, skip_special_tokens=True),
+        tokenizer.decode(generated, skip_special_tokens=False),
+        end,
     )
+
+
+def _pad_token_id(model, tokenizer):
+    """The id ``generate`` actually pads with, which need not be the tokenizer's."""
+    return model.generation_config.pad_token_id or tokenizer.pad_token_id
 
 
 def generate(
@@ -155,7 +172,7 @@ def generate(
     seconds = time.perf_counter() - start
 
     continuation, raw, new_tokens = _decode(
-        tokenizer, output[0][prompt_tokens:], tokenizer.pad_token_id
+        tokenizer, output[0][prompt_tokens:], _pad_token_id(model, tokenizer)
     )
     return Generation(
         message=message,
@@ -195,7 +212,7 @@ def generate_batch(
     encoded = tokenizer(
         prompts, return_tensors="pt", padding=True, padding_side="left"
     ).to(model.device)
-    prompt_tokens = encoded.input_ids.shape[1]
+    padded_width = encoded.input_ids.shape[1]
 
     torch.manual_seed(seed)
     start = time.perf_counter()
@@ -203,10 +220,11 @@ def generate_batch(
         outputs = model.generate(**encoded, max_new_tokens=max_new_tokens, **SAMPLING)
     batch_seconds = time.perf_counter() - start
 
+    pad_token_id = _pad_token_id(model, tokenizer)
     generations = []
-    for row, message in zip(outputs, messages):
+    for index, (row, message) in enumerate(zip(outputs, messages)):
         continuation, raw, new_tokens = _decode(
-            tokenizer, row[prompt_tokens:], tokenizer.pad_token_id
+            tokenizer, row[padded_width:], pad_token_id
         )
         generations.append(
             Generation(
@@ -216,7 +234,8 @@ def generate_batch(
                 continuation=continuation,
                 raw_continuation=raw,
                 seed=seed,
-                prompt_tokens=prompt_tokens,
+                # The row's own length, not the padded batch width.
+                prompt_tokens=int(encoded.attention_mask[index].sum()),
                 new_tokens=new_tokens,
                 max_new_tokens=max_new_tokens,
             )

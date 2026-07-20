@@ -62,14 +62,15 @@ Any ~16GB+ CUDA GPU runs the 4B model in BF16. On a rented box:
 ```bash
 pip install -e ".[gpu]"
 export HF_HOME=/workspace/hf          # keep the model cache on persistent storage
-python scripts/smoke_qwen.py > results/gpu_smoke.json
+python scripts/smoke_qwen.py            # writes results/gpu_smoke.json
 ```
 
-The smoke script generates three prompts, asserts no `<think>` leakage, and records
+The smoke script generates three prompts, checks for `<think>` leakage, and records
 throughput, peak VRAM and dtype alongside diagnostics that need real weights:
 base-model refusal rate, whether an injected prefill is continued rather than
 restarted, the layer/module structure the abliteration step depends on, and seed
-reproducibility.
+reproducibility. It writes the record even if a section fails, so a partial run is
+still diagnosable.
 
 ## Abliteration
 

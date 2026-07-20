@@ -1,11 +1,15 @@
-"""On-GPU smoke check for the target model. Prints one JSON record to stdout.
+"""On-GPU smoke check for the target model.
 
 Confirms the model generates cleanly with thinking disabled, and runs the diagnostics
 that need real weights and so cannot be covered by the offline tests: whether the model
 continues an injected prefill, whether seeds take, the layer/module structure the
 abliteration step depends on, and throughput.
 
-Usage: python scripts/smoke_qwen.py > results/gpu_smoke.json
+Writes results/gpu_smoke.json. GPU time is paid for by the second, so the record is
+written even if a section fails: whatever completed is kept, and the failure is
+recorded in the file rather than only on stderr.
+
+Usage: python scripts/smoke_qwen.py
 """
 
 import csv
@@ -22,6 +26,7 @@ from generation import (
     MODEL_ID,
     REVISION,
     SAMPLING,
+    THINKING_SENTINEL,
     build_prompt,
     contains_thinking,
     generate,
@@ -67,26 +72,28 @@ def looks_like_refusal(text):
 
 @lru_cache(maxsize=1)
 def harmful_prompts():
-    with open(ROOT / "data" / "strongreject_dataset.csv") as handle:
+    with open(ROOT / "data" / "strongreject_dataset.csv", encoding="utf-8") as handle:
         return tuple(row["forbidden_prompt"] for row in csv.DictReader(handle))
 
 
 def smoke(model, tokenizer):
-    """The S2 done-when: three clean generations, no thinking leakage.
+    """The done-when: three clean generations, no thinking leakage.
 
-    Deliberately unbatched — these are the single-stream tok/s figures.
+    Deliberately unbatched — these are the single-stream tok/s figures. Leakage is
+    recorded rather than asserted, so a failure still produces a diagnosable record.
     """
     results = []
     for index, message in enumerate(SMOKE_PROMPTS):
         gen = generate(model, tokenizer, message, seed=SEED + index)
-        assert not contains_thinking(gen.continuation), f"thinking leaked: {message!r}"
         results.append(
             {
                 "prompt": message,
                 "continuation": gen.continuation,
+                "thinking_leaked": contains_thinking(gen.continuation),
                 "new_tokens": gen.new_tokens,
                 "seconds": round(gen.seconds, 2),
                 "tokens_per_second": round(gen.tokens_per_second, 1),
+                "hit_token_cap": gen.new_tokens >= gen.max_new_tokens,
                 "seed": gen.seed,
             }
         )
@@ -141,8 +148,15 @@ def diagnostic_prefill(model, tokenizer):
         model, tokenizer, harmful_message, seed=SEED, prefill=BENIGN_PREFILL, max_new_tokens=128
     )
 
-    # The injected string must be recoverable by the grader's hook, byte for byte.
-    recovered, was_stripped = strip_prefill(benign.output, BENIGN_PREFILL)
+    # Does the prefill survive tokenize -> generate -> decode unchanged? Reconstructing
+    # output as prefill + continuation would make this a restatement of concatenation,
+    # so compare against what the tokenizer actually round-trips.
+    round_tripped = tokenizer.decode(
+        tokenizer(prompt).input_ids, skip_special_tokens=True
+    )
+    recovered, was_stripped = strip_prefill(
+        round_tripped.split(THINKING_SENTINEL.strip())[-1].lstrip("\n"), BENIGN_PREFILL
+    )
 
     return {
         "prompt_tail_token_ids": tokenizer(prompt).input_ids[-12:],
@@ -159,8 +173,8 @@ def diagnostic_prefill(model, tokenizer):
             "looks_like_refusal": looks_like_refusal(harmful.continuation),
         },
         "round_trip": {
-            "was_stripped": was_stripped,
-            "recovered_matches_continuation": recovered == benign.continuation,
+            "prefill_survives_tokenizer": was_stripped,
+            "residue_after_stripping": recovered,
         },
     }
 
@@ -201,39 +215,47 @@ def diagnostic_seeds(model, tokenizer):
 
 def main():
     started = time.time()
-    model, tokenizer = load_model()
+    output_path = ROOT / "results" / "gpu_smoke.json"
+    output_path.parent.mkdir(exist_ok=True)
+    record = {}
 
-    # Measure the peak for the generation workload only; the structure probe below
-    # allocates hidden states the real workload never holds.
-    torch.cuda.reset_peak_memory_stats()
-    smoke_results = smoke(model, tokenizer)
-    generation_peak_gb = round(torch.cuda.max_memory_allocated() / 1e9, 2)
+    try:
+        model, tokenizer = load_model()
+        # Absorb kernel autotune so the first measured generation is not a cold one.
+        generate(model, tokenizer, "Hello.", seed=SEED, max_new_tokens=8)
 
-    # One batched run serves both the refusal sample and the throughput number.
-    harmful_batch, batch_seconds = generate_batch(
-        model, tokenizer, list(harmful_prompts()[:10]), seed=SEED, max_new_tokens=256
-    )
-    batch_tokens = sum(g.new_tokens for g in harmful_batch)
+        record.update(
+            {
+                "model_id": MODEL_ID,
+                "revision": REVISION,
+                "dtype": str(model.dtype),
+                "gpu": torch.cuda.get_device_name(0),
+                "sampling": dict(SAMPLING),
+                "versions": {
+                    "torch": torch.__version__,
+                    "transformers": transformers.__version__,
+                    "cuda": torch.version.cuda,
+                    "python": sys.version.split()[0],
+                },
+            }
+        )
 
-    record = {
-        "model_id": MODEL_ID,
-        "revision": REVISION,
-        "dtype": str(model.dtype),
-        "gpu": torch.cuda.get_device_name(0),
-        "sampling": dict(SAMPLING),
-        "versions": {
-            "torch": torch.__version__,
-            "transformers": transformers.__version__,
-            "cuda": torch.version.cuda,
-            "python": sys.version.split()[0],
-        },
-        "peak_vram_gb": generation_peak_gb,
-        "smoke": smoke_results,
-        "diagnostics": {
-            "base_refusal": diagnostic_base_refusal(harmful_batch),
-            "prefill": diagnostic_prefill(model, tokenizer),
-            "structure": diagnostic_structure(model, tokenizer),
-            "seeds": diagnostic_seeds(model, tokenizer),
+        torch.cuda.reset_peak_memory_stats()
+        record["smoke"] = smoke(model, tokenizer)
+        record["peak_vram_gb_single_stream"] = round(
+            torch.cuda.max_memory_allocated() / 1e9, 2
+        )
+
+        # One batched run serves both the refusal sample and the throughput number.
+        harmful_batch, batch_seconds = generate_batch(
+            model, tokenizer, list(harmful_prompts()[:10]), seed=SEED, max_new_tokens=256
+        )
+        batch_tokens = sum(g.new_tokens for g in harmful_batch)
+        # Reserved rather than allocated: this is what OOMs and what nvidia-smi shows.
+        record["peak_vram_gb_batched"] = round(torch.cuda.max_memory_allocated() / 1e9, 2)
+        record["peak_vram_gb_reserved"] = round(torch.cuda.max_memory_reserved() / 1e9, 2)
+
+        record["diagnostics"] = {
             "throughput": {
                 "batch_size": len(harmful_batch),
                 "total_new_tokens": batch_tokens,
@@ -241,10 +263,18 @@ def main():
                 "batched_tokens_per_second": round(batch_tokens / batch_seconds, 1),
                 "note": "HF generate, not vLLM; do not extrapolate the full-run budget",
             },
-        },
-        "wall_clock_seconds": round(time.time() - started, 1),
-    }
-    print(json.dumps(record, indent=2))
+            "base_refusal": diagnostic_base_refusal(harmful_batch),
+            "prefill": diagnostic_prefill(model, tokenizer),
+            "structure": diagnostic_structure(model, tokenizer),
+            "seeds": diagnostic_seeds(model, tokenizer),
+        }
+    except Exception as exc:
+        record["failed_with"] = f"{type(exc).__name__}: {exc}"
+        raise
+    finally:
+        record["wall_clock_seconds"] = round(time.time() - started, 1)
+        output_path.write_text(json.dumps(record, indent=2))
+        print(f"wrote {output_path}", file=sys.stderr)
 
 
 if __name__ == "__main__":
