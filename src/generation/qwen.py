@@ -123,15 +123,15 @@ def load_model(model_id: str = MODEL_ID, revision: str = REVISION):
 
 
 def _decode(tokenizer, token_ids, pad_token_id):
-    """Decode one row of generated tokens to ``(clean, raw, new_token_count)``.
+    """Decode one row of generated tokens (a plain list) to ``(clean, raw, count)``.
 
     Rows that stop early are filled with the pad token, so the tail is cut before
     decoding; otherwise ``raw`` would carry hundreds of literal pad strings and any
     control-token check over it would be useless. A row whose own final token is the
     pad token is undercounted by one, which is within tolerance for these numbers.
+    Expects ``token_ids`` already on the host, so the scan adds no device sync.
     """
-    pad_positions = (token_ids == pad_token_id).nonzero()
-    end = int(pad_positions[0]) if len(pad_positions) else len(token_ids)
+    end = token_ids.index(pad_token_id) if pad_token_id in token_ids else len(token_ids)
     generated = token_ids[:end]
     return (
         tokenizer.decode(generated, skip_special_tokens=True),
@@ -142,7 +142,8 @@ def _decode(tokenizer, token_ids, pad_token_id):
 
 def _pad_token_id(model, tokenizer):
     """The id ``generate`` actually pads with, which need not be the tokenizer's."""
-    return model.generation_config.pad_token_id or tokenizer.pad_token_id
+    configured = model.generation_config.pad_token_id
+    return configured if configured is not None else tokenizer.pad_token_id
 
 
 def generate(
@@ -172,7 +173,7 @@ def generate(
     seconds = time.perf_counter() - start
 
     continuation, raw, new_tokens = _decode(
-        tokenizer, output[0][prompt_tokens:], _pad_token_id(model, tokenizer)
+        tokenizer, output[0][prompt_tokens:].tolist(), _pad_token_id(model, tokenizer)
     )
     return Generation(
         message=message,
@@ -220,12 +221,14 @@ def generate_batch(
         outputs = model.generate(**encoded, max_new_tokens=max_new_tokens, **SAMPLING)
     batch_seconds = time.perf_counter() - start
 
+    # Pull the generated tokens and prompt lengths to the host once, rather than
+    # syncing per row inside the loop.
     pad_token_id = _pad_token_id(model, tokenizer)
+    rows = outputs[:, padded_width:].tolist()
+    prompt_lengths = encoded.attention_mask.sum(dim=1).tolist()
     generations = []
-    for index, (row, message) in enumerate(zip(outputs, messages)):
-        continuation, raw, new_tokens = _decode(
-            tokenizer, row[padded_width:], pad_token_id
-        )
+    for index, (row, message) in enumerate(zip(rows, messages)):
+        continuation, raw, new_tokens = _decode(tokenizer, row, pad_token_id)
         generations.append(
             Generation(
                 message=message,
@@ -235,7 +238,7 @@ def generate_batch(
                 raw_continuation=raw,
                 seed=seed,
                 # The row's own length, not the padded batch width.
-                prompt_tokens=int(encoded.attention_mask[index].sum()),
+                prompt_tokens=prompt_lengths[index],
                 new_tokens=new_tokens,
                 max_new_tokens=max_new_tokens,
             )
