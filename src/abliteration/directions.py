@@ -47,7 +47,7 @@ def collect_mean_last_token_states(model, tokenizer, prompts, *, batch_size: int
     if n == 0:
         raise ValueError("prompts is empty")
 
-    totals = None
+    totals = 0.0  # tensor-add broadcasts over the scalar on the first batch
     for start in range(0, n, batch_size):
         batch = prompts[start : start + batch_size]
         rendered = [build_prompt(tokenizer, message) for message in batch]
@@ -61,8 +61,7 @@ def collect_mean_last_token_states(model, tokenizer, prompts, *, batch_size: int
         per_layer_last = torch.stack(
             [hs[:, -1, :].to(torch.float64) for hs in out.hidden_states], dim=0
         )  # [n_hidden_states, batch, d_model]
-        batch_sum = per_layer_last.sum(dim=1)  # [n_hidden_states, d_model]
-        totals = batch_sum if totals is None else totals + batch_sum
+        totals = totals + per_layer_last.sum(dim=1)  # [n_hidden_states, d_model]
         del out
 
     return totals / n

@@ -113,7 +113,7 @@ def sample_balanced(
         raise ValueError(f"only {total} prompts available, need {n_total}")
 
     chosen: list[str] = []
-    keys = sorted(pools)
+    keys = list(pools)  # already in sorted-key insertion order
     while len(chosen) < n_total:
         for key in keys:
             if pools[key]:
