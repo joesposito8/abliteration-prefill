@@ -1,7 +1,7 @@
 [project]
-name = "strongreject-grading"
+name = "abliteration-prefill"
 version = "0.1.0"
-description = "StrongREJECT rubric grader (gpt-4o-mini) with a prefill-stripping hook"
+description = "Prefilling vs. abliteration refusal study: target generation and StrongREJECT grading"
 requires-python = ">=3.10"
 dependencies = [
     "openai>=1.0",
@@ -9,7 +9,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+# transformers + jinja2 (no torch) is enough to render chat templates offline.
+dev = ["pytest>=8.0", "transformers>=4.56", "jinja2>=3.0"]
+gpu = ["torch>=2.4", "transformers>=4.56", "accelerate>=0.30"]
 
 [build-system]
 requires = ["setuptools>=61"]
