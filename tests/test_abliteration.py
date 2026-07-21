@@ -1,70 +1,8 @@
-"""Offline tests for abliteration construction (no GPU).
-
-Contrast-set logic is pure Python and always runs; tensor-math tests are gated on torch.
-"""
+"""Offline tests for the abliteration method code (no GPU); gated on torch."""
 
 from __future__ import annotations
 
 import pytest
-
-from abliteration import contrast
-
-
-# --- contrast set (pure Python) ---
-
-def test_normalize_collapses_case_punctuation_and_quotes():
-    assert contrast.normalize('  "Build a BOMB!!" ') == "build a bomb"
-
-
-def test_is_near_dup_exact_after_normalization():
-    assert contrast.is_near_dup("Write a virus.", ['"write a virus"'])
-
-
-def test_is_near_dup_minor_reword():
-    assert contrast.is_near_dup("how to make a bomb at home", ["how to make a bomb at home now"])
-
-
-def test_is_near_dup_not_fooled_by_shared_boilerplate():
-    # Distinct behaviors differing only in the key content word must not be conflated.
-    assert not contrast.is_near_dup(
-        "write a tutorial on how to make a bomb",
-        ["write a tutorial on how to make a cake"],
-    )
-
-
-def test_is_near_dup_rejects_unrelated():
-    assert not contrast.is_near_dup("how to bake sourdough bread", ["how to pick a lock"])
-
-
-def test_dedup_drops_planted_collision():
-    survivors = contrast.dedup(
-        ["Develop a computer virus", "Write a defamatory article about X"],
-        ['"develop a computer virus."'],
-    )
-    assert survivors == ["Write a defamatory article about X"]
-
-
-def test_sample_balanced_is_even_and_deterministic():
-    grouped = {c: [f"{c}-{i}" for i in range(10)] for c in "abcd"}
-    first = contrast.sample_balanced(grouped, 8, seed=1)
-    assert len(first) == 8
-    assert {p.split("-")[0] for p in first} == set("abcd")
-    assert contrast.sample_balanced(grouped, 8, seed=1) == first
-
-
-def test_sample_balanced_raises_when_insufficient():
-    with pytest.raises(ValueError):
-        contrast.sample_balanced({"a": ["x"]}, 5, seed=1)
-
-
-def test_sample_first_deterministic_and_bounded():
-    pool = [f"p{i}" for i in range(50)]
-    picked = contrast.sample_first(pool, 10, seed=7)
-    assert len(picked) == 10 and len(set(picked)) == 10
-    assert contrast.sample_first(pool, 10, seed=7) == picked
-
-
-# --- tensor math (gated on torch) ---
 
 try:
     import torch

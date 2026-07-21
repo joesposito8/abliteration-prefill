@@ -77,25 +77,21 @@ Difference-of-means refusal-direction weight editing (Arditi et al. 2024,
 arXiv:2406.11717), ported from `andyrdt/refusal_direction`. Requires a GPU.
 
 ```python
-from generation import load_model
-from abliteration import (
-    load_extraction, load_eval, collect_mean_last_token_states,
-    refusal_directions, abliterated,
-)
+from generation import load_model, generate
+from abliteration import collect_mean_last_token_states, refusal_directions, abliterated
 
 model, tok = load_model()
-harmful, harmless = load_extraction()                   # 256 + 256, vendored
 directions = refusal_directions(                        # [n_layers, d_model], unit
-    collect_mean_last_token_states(model, tok, harmful),
-    collect_mean_last_token_states(model, tok, harmless),
+    collect_mean_last_token_states(model, tok, harmful_prompts),
+    collect_mean_last_token_states(model, tok, harmless_prompts),
 )
 with abliterated(model, directions[22]):                # base weights restored on exit
-    gen = generate(model, tok, load_eval()[0], seed=1)
+    gen = generate(model, tok, prompt, seed=1)
 ```
 
 `abliterated` orthogonalizes `embed_tokens` and every layer's `o_proj`/`down_proj`
 against the direction, then restores the base weights — no edited checkpoint is
-persisted. Prompt subsets are vendored under `data/` (see `data/SOURCES.md`).
+persisted. Callers supply their own harmful/harmless contrast and evaluation prompts.
 
 ## Evaluation
 
