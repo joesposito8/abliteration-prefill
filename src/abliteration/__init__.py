@@ -1,4 +1,4 @@
-"""Difference-of-means refusal-direction abliteration for the target model."""
+"""Difference-of-means refusal-direction abliteration."""
 
 from .directions import (
     collect_mean_last_token_states,
