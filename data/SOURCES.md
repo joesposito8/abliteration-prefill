@@ -24,6 +24,33 @@ higher scores"); it is not used here.
 
 - https://github.com/alexandrasouly/strongreject → `strongreject_dataset/strongreject_dataset.csv`
 
+## Extraction / validation / pilot datasets (frozen)
+
+Built by `scripts/build_datasets.py` from the sources below and frozen with pinned
+SHA-256s in `freeze_manifest.json`. Rebuild is deterministic given those sources;
+the script aborts if an upstream hash drifts. Global seed `SEED = 20260724`
+(`src/study/__init__.py`), one legacy-`RandomState` permutation per draw.
+
+- `harmbench_standard_behaviors.csv` — the 200 HarmBench **standard** behaviors
+  (`FunctionalCategory == "standard"` of `harmbench_behaviors_text_all.csv`), the
+  source of truth for the split. Use this file, not HarmBench's own `_val`/`_test`
+  splits — the 128/72 split is our own seeded, non-stratified partition of the 200.
+  - https://github.com/centerforaisafety/HarmBench → `data/behavior_datasets/harmbench_behaviors_text_all.csv`
+- `extraction_harmful.csv` (128) / `validation_harmful.csv` (72) — disjoint
+  complement within the 200; extraction feeds direction extraction, validation
+  feeds primary-layer selection.
+- `extraction_harmless.csv` (128) — Alpaca instructions with empty `input`,
+  exact-text deduped (first occurrence), seeded-sampled; the harmless contrast.
+  `alpaca_data.json` (52,002 items) is not vendored (22 MB); its SHA-256 is pinned.
+  - https://github.com/tatsu-lab/stanford_alpaca → `alpaca_data.json`
+- `pilot_prompts.csv` (30) — the seeded-random 30 of the 313 StrongREJECT prompts
+  (saturation-pilot slice, guardrail 18); `prompt_id` = 0-based row index into
+  `strongreject_dataset.csv`. Not a disjoint set and not the first 30.
+
+Verbatim (exact-string) overlap of the HarmBench-200 vs the StrongREJECT-313 is
+**0** (guardrail 11; HarmBench is source-disjoint from StrongREJECT, so no semantic
+dedup). Verified across raw / stripped / lowercased comparisons and per subset.
+
 ## Known graded examples
 
 `example_graded_answers.csv` — 50 jailbreak responses with a reference `score` and
