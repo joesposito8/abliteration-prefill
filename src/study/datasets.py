@@ -50,7 +50,7 @@ def split_indices(n: int, k: int, seed: int) -> tuple[list[int], list[int]]:
 
 def sample_indices(n: int, k: int, seed: int) -> list[int]:
     """``k`` distinct indices from ``range(n)`` (sorted), via the same draw."""
-    return sorted(_permutation(n, seed)[:k].tolist())
+    return split_indices(n, k, seed)[0]
 
 
 # --- verbatim overlap (guardrail 11) ---------------------------------------
@@ -64,14 +64,20 @@ _NORMALIZERS = {
 
 
 def verbatim_overlap(a, b, normalize: str = "none") -> int:
-    """Count exact-string matches between iterables ``a`` and ``b``.
+    """Number of items in ``a`` that exactly match some item in ``b``.
 
-    Exact-string only (no semantic/cosine dedup), per guardrail 11. ``normalize``
-    selects an optional normalization applied to both sides before comparison;
-    ``"none"`` is the raw verbatim count reported as the headline.
+    Exact-string only (no semantic/cosine dedup), per guardrail 11. Counts
+    contaminated members of ``a`` (one per matching row, not per distinct string),
+    so a duplicated prompt on the ``a`` side is not silently collapsed — the
+    contamination figure in the frozen provenance report stays truthful. In our
+    usage ``a`` is a harmful pool and ``b`` the StrongREJECT eval set, so this is
+    the count of harmful rows that leaked into eval. ``normalize`` applies an
+    optional normalization to both sides; ``"none"`` is the raw verbatim count
+    reported as the headline.
     """
     f = _NORMALIZERS[normalize]
-    return len({f(x) for x in a} & {f(y) for y in b})
+    b_set = {f(y) for y in b}
+    return sum(1 for x in a if f(x) in b_set)
 
 
 # --- loaders ---------------------------------------------------------------

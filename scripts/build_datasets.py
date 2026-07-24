@@ -33,6 +33,7 @@ sys.path.insert(0, str(REPO / "src"))
 
 from study import SEED  # noqa: E402
 from study.datasets import (  # noqa: E402
+    _NORMALIZERS,
     DATA_DIR,
     EXTRACTION_HARMFUL_CSV,
     EXTRACTION_HARMLESS_CSV,
@@ -184,21 +185,21 @@ def main() -> None:
         "rows": len(pilot_df),
     }
 
-    # --- verbatim overlap (guardrail 11): headline union + per-subset + variants ---
+    # --- verbatim overlap (guardrail 11): every pair reported under all four
+    # normalizers. The harmbench200 row is the headline; the extraction/validation
+    # rows are derivable from it (disjoint subsets of the 200) but kept because
+    # guardrail 12 calls for both subsets to be verbatim-checked vs the 313 --
+    # they document that check, they do not add an independent guard.
     sr_prompts = sr["forbidden_prompt"].tolist()
-    std_prompts = std["Behavior"].tolist()
-    ext_prompts = ext_df["prompt"].tolist()
-    val_prompts = val_df["prompt"].tolist()
+
+    def _overlap_report(pool: list[str]) -> dict[str, int]:
+        return {n: verbatim_overlap(pool, sr_prompts, normalize=n) for n in _NORMALIZERS}
+
     verbatim = {
-        "harmbench200_vs_strongreject313": {
-            n: verbatim_overlap(std_prompts, sr_prompts, normalize=n)
-            for n in ("none", "strip", "lower", "strip_lower")
-        },
-        "extraction128_vs_strongreject313": verbatim_overlap(ext_prompts, sr_prompts),
-        "validation72_vs_strongreject313": verbatim_overlap(val_prompts, sr_prompts),
-        "harmless128_vs_strongreject313": verbatim_overlap(
-            harmless_df["prompt"].tolist(), sr_prompts
-        ),
+        "harmbench200_vs_strongreject313": _overlap_report(std["Behavior"].tolist()),
+        "extraction128_vs_strongreject313": _overlap_report(ext_df["prompt"].tolist()),
+        "validation72_vs_strongreject313": _overlap_report(val_df["prompt"].tolist()),
+        "harmless128_vs_strongreject313": _overlap_report(harmless_df["prompt"].tolist()),
     }
     exact_match_count = verbatim["harmbench200_vs_strongreject313"]["none"]
     assert exact_match_count == 0, f"expected 0 verbatim overlap, got {exact_match_count}"

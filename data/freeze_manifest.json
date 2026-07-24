@@ -84,14 +84,29 @@
   "split_method": "RandomState(SEED).permutation(200): [:128]=extraction, [128:]=validation; non-stratified; disjoint complement within the 200 standard behaviors",
   "verbatim_exact_match_count": 0,
   "verbatim_overlap": {
-    "extraction128_vs_strongreject313": 0,
+    "extraction128_vs_strongreject313": {
+      "lower": 0,
+      "none": 0,
+      "strip": 0,
+      "strip_lower": 0
+    },
     "harmbench200_vs_strongreject313": {
       "lower": 0,
       "none": 0,
       "strip": 0,
       "strip_lower": 0
     },
-    "harmless128_vs_strongreject313": 0,
-    "validation72_vs_strongreject313": 0
+    "harmless128_vs_strongreject313": {
+      "lower": 0,
+      "none": 0,
+      "strip": 0,
+      "strip_lower": 0
+    },
+    "validation72_vs_strongreject313": {
+      "lower": 0,
+      "none": 0,
+      "strip": 0,
+      "strip_lower": 0
+    }
   }
 }
