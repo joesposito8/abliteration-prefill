@@ -1,10 +1,7 @@
-"""Frozen dataset access + the canonical seeded-draw helpers.
+"""Frozen dataset access and the canonical seeded-draw helpers.
 
-The helpers here are the single source of truth for every seeded split in the
-study: ``scripts/build_datasets.py`` uses them to write the frozen CSVs and
-``tests/test_datasets.py`` uses them to prove the committed CSVs reproduce from
-``SEED``. Keep this module pandas/numpy only (no torch/transformers) so it stays
-importable in the offline test environment.
+Shared by the build script and the tests, so the committed CSVs and their
+reproduction can't drift. Kept pandas/numpy-only so it imports offline.
 """
 
 from __future__ import annotations
@@ -26,24 +23,18 @@ FREEZE_MANIFEST_JSON = DATA_DIR / "freeze_manifest.json"
 
 
 # --- canonical seeded draws ------------------------------------------------
-# One mechanism (a legacy-RandomState permutation over a canonical row order)
-# backs every split, so nothing can pick differently than it reproduces. Legacy
-# RandomState (MT19937) is version-frozen by NumPy policy; default_rng is not.
+# One mechanism backs every split. Legacy RandomState (MT19937) is version-frozen
+# by NumPy policy; default_rng is not.
 
 
 def _permutation(n: int, seed: int) -> np.ndarray:
-    """Legacy-RandomState permutation of ``range(n)`` — reproducible forever."""
     return np.random.RandomState(seed).permutation(n)
 
 
 def split_indices(n: int, k: int, seed: int) -> tuple[list[int], list[int]]:
-    """Partition ``range(n)`` into a ``k``-sized part and its complement.
-
-    Returns ``(first_sorted, rest_sorted)``: the first ``k`` of the seeded
-    permutation and the remaining ``n - k``, each sorted ascending so the
-    written files are in canonical order. Membership is what the seed fixes;
-    sorting only makes the output stable.
-    """
+    """Split ``range(n)`` into the first ``k`` of the seeded permutation and the
+    rest, each sorted ascending (the seed fixes membership; sorting only makes
+    the written files stable)."""
     perm = _permutation(n, seed)
     return sorted(perm[:k].tolist()), sorted(perm[k:].tolist())
 
@@ -53,7 +44,7 @@ def sample_indices(n: int, k: int, seed: int) -> list[int]:
     return split_indices(n, k, seed)[0]
 
 
-# --- verbatim overlap (guardrail 11) ---------------------------------------
+# --- verbatim (exact-string) contamination check ---------------------------
 
 _NORMALIZERS = {
     "none": lambda s: s,
@@ -64,16 +55,12 @@ _NORMALIZERS = {
 
 
 def verbatim_overlap(a, b, normalize: str = "none") -> int:
-    """Number of items in ``a`` that exactly match some item in ``b``.
+    """Number of items in ``a`` (a harmful pool) that exactly match some item in
+    ``b`` (the eval set) — i.e. harmful rows that leaked into eval.
 
-    Exact-string only (no semantic/cosine dedup), per guardrail 11. Counts
-    contaminated members of ``a`` (one per matching row, not per distinct string),
-    so a duplicated prompt on the ``a`` side is not silently collapsed — the
-    contamination figure in the frozen provenance report stays truthful. In our
-    usage ``a`` is a harmful pool and ``b`` the StrongREJECT eval set, so this is
-    the count of harmful rows that leaked into eval. ``normalize`` applies an
-    optional normalization to both sides; ``"none"`` is the raw verbatim count
-    reported as the headline.
+    Exact-string only, no semantic dedup. Counts per matching row, not per
+    distinct string, so a duplicate on the ``a`` side isn't silently collapsed.
+    ``normalize`` optionally normalizes both sides; ``"none"`` is the headline.
     """
     f = _NORMALIZERS[normalize]
     b_set = {f(y) for y in b}
@@ -87,7 +74,7 @@ def load_strongreject() -> pd.DataFrame:
     """The frozen 313-prompt StrongREJECT set with a ``prompt_id`` column.
 
     ``prompt_id`` is the 0-based row index in file order; the committed file hash
-    pins that order. This is the id the run manifest keys on downstream.
+    pins that order. Downstream generation records are keyed by this id.
     """
     df = pd.read_csv(STRONGREJECT_CSV)
     df.insert(0, "prompt_id", range(len(df)))
@@ -110,5 +97,5 @@ def load_extraction_harmless() -> list[str]:
 
 
 def load_pilot_prompts() -> pd.DataFrame:
-    """The seeded-random 30 StrongREJECT prompts (guardrail 18), with prompt_id."""
+    """The seeded-random 30 StrongREJECT prompts (the pilot slice), with prompt_id."""
     return pd.read_csv(PILOT_PROMPTS_CSV)

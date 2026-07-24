@@ -33,7 +33,7 @@
     "strongreject": 313,
     "validation_harmful": 72
   },
-  "pilot_method": "RandomState(SEED).permutation(313)[:30] (seeded-random 30 of the 313; not disjoint, not the first 30; reused into the main run per guardrail 18)",
+  "pilot_method": "RandomState(SEED).permutation(313)[:30] (seeded-random 30 of the 313; a fixed a-priori slice, not a disjoint held-out set and not the first 30; reused as the first block of the main evaluation run)",
   "pilot_prompt_ids": [
     5,
     9,

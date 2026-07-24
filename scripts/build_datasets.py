@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """Build and freeze the study datasets from their upstream sources.
 
-Deterministic and idempotent: given the pinned source files, re-running produces
-byte-identical artifacts. Network is used only to fetch the two upstream sources,
-whose SHA-256s are pinned below and asserted on every run (a mutable-``main``
-upstream that drifted aborts the build rather than silently re-freezing).
+Deterministic given the pinned sources: re-running produces byte-identical
+artifacts, and a drifted upstream SHA-256 aborts the build rather than re-freezing.
 
 Outputs (all under ``data/``):
   harmbench_standard_behaviors.csv   200 HarmBench standard behaviors (source of truth)
@@ -185,11 +183,9 @@ def main() -> None:
         "rows": len(pilot_df),
     }
 
-    # --- verbatim overlap (guardrail 11): every pair reported under all four
-    # normalizers. The harmbench200 row is the headline; the extraction/validation
-    # rows are derivable from it (disjoint subsets of the 200) but kept because
-    # guardrail 12 calls for both subsets to be verbatim-checked vs the 313 --
-    # they document that check, they do not add an independent guard.
+    # --- verbatim overlap of each harmful pool with eval, under all normalizers.
+    # harmbench200 is the headline; the subset rows are derivable but kept so each
+    # split is recorded as independently checked against eval.
     sr_prompts = sr["forbidden_prompt"].tolist()
 
     def _overlap_report(pool: list[str]) -> dict[str, int]:
@@ -217,7 +213,8 @@ def main() -> None:
         ),
         "pilot_method": (
             "RandomState(SEED).permutation(313)[:30] (seeded-random 30 of the 313; "
-            "not disjoint, not the first 30; reused into the main run per guardrail 18)"
+            "a fixed a-priori slice, not a disjoint held-out set and not the first 30; "
+            "reused as the first block of the main evaluation run)"
         ),
         "counts": {
             "harmbench_standard": len(std_out),

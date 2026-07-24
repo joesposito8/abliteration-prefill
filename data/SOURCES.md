@@ -44,12 +44,15 @@ the script aborts if an upstream hash drifts. Global seed `SEED = 20260724`
   `alpaca_data.json` (52,002 items) is not vendored (22 MB); its SHA-256 is pinned.
   - https://github.com/tatsu-lab/stanford_alpaca → `alpaca_data.json`
 - `pilot_prompts.csv` (30) — the seeded-random 30 of the 313 StrongREJECT prompts
-  (saturation-pilot slice, guardrail 18); `prompt_id` = 0-based row index into
-  `strongreject_dataset.csv`. Not a disjoint set and not the first 30.
+  (the saturation-check pilot slice); `prompt_id` = 0-based row index into
+  `strongreject_dataset.csv`. A fixed a-priori slice, not a disjoint held-out set
+  and not the first 30.
 
 Verbatim (exact-string) overlap of the HarmBench-200 vs the StrongREJECT-313 is
-**0** (guardrail 11; HarmBench is source-disjoint from StrongREJECT, so no semantic
-dedup). Verified across raw / stripped / lowercased comparisons and per subset.
+**0**. HarmBench is source-disjoint from StrongREJECT (StrongREJECT draws from
+AdvBench and others, never HarmBench), so an exact-string check suffices and no
+semantic dedup is needed. Verified across raw / stripped / lowercased comparisons
+and per subset.
 
 ## Known graded examples
 

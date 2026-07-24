@@ -1,8 +1,6 @@
 """Frozen study configuration and dataset access.
 
-``SEED`` is the one project-wide random seed. Every seeded draw in the study
-(the extraction/validation split, the harmless-contrast sample, the pilot slice,
-and any downstream derivation that wants a shared base seed) uses it, so the
+``SEED`` is the one project-wide random seed: every seeded draw uses it, so the
 whole study reproduces from a single constant.
 """
 

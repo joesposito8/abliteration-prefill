@@ -1,9 +1,7 @@
 """Frozen-dataset invariants — fully offline (no network, no paid API).
 
-Proves the committed artifacts match their manifest hashes and reproduce exactly
-from ``SEED`` via the same ``study.datasets`` helpers the build used. Guards the
-preregistration: the split and pilot must be a deterministic function of the seed
-and the committed sources, not a one-off draw that can drift.
+Checks the committed artifacts match their manifest hashes and reproduce exactly
+from ``SEED`` via the same ``study.datasets`` helpers the build used.
 """
 
 from __future__ import annotations
