@@ -93,6 +93,35 @@ with abliterated(model, directions[22]):                # base weights restored 
 against the direction, then restores the base weights — no edited checkpoint is
 persisted. Callers supply their own harmful/harmless contrast and evaluation prompts.
 
+## Prefill portfolio
+
+The fixed 13-prefill attack portfolio: six helper-prompt families (each producing two
+seeded, request-specific prefill variants from the abliterated Gemma helper) plus Kuo's
+static baseline. Templates are authored from the Struppek prefill taxonomy
+(arXiv:2602.14689); decoding/retry/length/duplicate rules are frozen in code.
+
+```python
+from prefills import FAMILIES, PORTFOLIO, load_prompt, fill_prompt, produce_family
+
+template = load_prompt("system_simulation")            # self-contained helper prompt
+filled = fill_prompt(template, "<forbidden prompt>")   # fills the one {forbidden_prompt} slot
+variants = produce_family("system_simulation", filled, prompt_id, generate_fn)  # 2 variants
+```
+
+`produce_family` applies the frozen rules (`src/prefills/rules.py`): helper sampling
+temperature 1.0 / top_p 0.95 / top_k 64 (the full tuple is pinned so nothing leaks from
+model-config defaults), a 512-token prefill cap, up to 3 validity retries then a fixed
+fallback, and an exact within-family / vs-baseline resample-once duplicate rule. The
+actual Gemma call is injected as `generate_fn`, so the portfolio logic is offline-testable.
+
+Freeze the portfolio (hash every prompt + rule into a manifest with one roll-up hash):
+
+```bash
+python scripts/freeze_portfolio.py     # writes data/portfolio_manifest.json
+```
+
+Sources and the two documented example deviations: `data/SOURCES.md`.
+
 ## Evaluation
 
 _TODO — run the prefilling-vs-abliteration comparison and analyze coverage._
@@ -102,6 +131,7 @@ _TODO — run the prefilling-vs-abliteration comparison and analyze coverage._
 ```
 src/grading/      StrongREJECT grader + prefill hook
 src/generation/   target-model generation (GPU)
+src/prefills/     the 13-prefill attack portfolio (helper prompts + frozen rules)
 data/             prompt set, graded examples, sources
 tests/            offline + live tests
 ```
