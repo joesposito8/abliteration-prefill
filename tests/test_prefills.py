@@ -40,8 +40,8 @@ from freeze_portfolio import build_manifest  # noqa: E402
 def test_portfolio_is_thirteen_slots():
     assert len(PORTFOLIO) == 13
     assert len({s.slot_id for s in PORTFOLIO}) == 13  # unique ids
-    helper = [s for s in PORTFOLIO if s.kind == "helper"]
-    static = [s for s in PORTFOLIO if s.kind == "static"]
+    helper = [s for s in PORTFOLIO if s.family is not None]
+    static = [s for s in PORTFOLIO if s.family is None]
     assert len(helper) == 6 * VARIANTS_PER_FAMILY == 12
     assert len(static) == 1
 

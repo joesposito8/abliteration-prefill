@@ -32,18 +32,17 @@ FAMILIES = (
 @dataclass(frozen=True)
 class Slot:
     slot_id: str
-    kind: str  # "helper" or "static"
-    family: str | None
+    family: str | None  # None for the static baseline
     variant: int | None
 
 
 def _build_portfolio() -> tuple[Slot, ...]:
     slots = [
-        Slot(f"{fam}:{v}", "helper", fam, v)
+        Slot(f"{fam}:{v}", fam, v)
         for fam in FAMILIES
         for v in range(VARIANTS_PER_FAMILY)
     ]
-    slots.append(Slot(STATIC_SLOT_ID, "static", None, None))
+    slots.append(Slot(STATIC_SLOT_ID, None, None))
     return tuple(slots)
 
 
