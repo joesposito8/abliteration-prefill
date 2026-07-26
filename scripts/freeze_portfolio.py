@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""Freeze the 13-prefill portfolio: hash every authored file and the frozen rules into
+"""Freeze the 13-prefill portfolio: hash every prompt file and the rule values into
 ``data/portfolio_manifest.json`` with one roll-up ``portfolio_sha256``.
 
-``build_manifest()`` is pure and deterministic (no clock, no randomness), so re-running
-produces a byte-identical manifest and the tests can verify hashing without a committed
-file. The single ``portfolio_sha256`` is what gets recorded in the preregistration
-tracker; after that the portfolio is never revised.
+``build_manifest()`` is pure and deterministic, so re-running produces a byte-identical
+manifest and the tests can verify hashing without a committed file.
 
 Run:  python scripts/freeze_portfolio.py
 """
@@ -47,18 +45,11 @@ CODE_FILES = ("rules.py", "families.py", "__init__.py")
 
 def build_manifest() -> dict:
     """The full manifest dict, including per-file hashes and the roll-up hash."""
-    prompt_dir = prompt_path(FAMILIES[0].id).parent
     code_dir = REPO / "src" / "prefills"
 
     families = [
-        {
-            "id": f.id,
-            "prompt_file": f.prompt_file,
-            "sha256": sha256_file(prompt_path(f.id)),
-            "struppek_definition": f.struppek_definition,
-            "review_note": f.review_note,
-        }
-        for f in FAMILIES
+        {"id": fam, "prompt_file": f"{fam}.txt", "sha256": sha256_file(prompt_path(fam))}
+        for fam in FAMILIES
     ]
     code = {name: sha256_file(code_dir / name) for name in CODE_FILES}
 
@@ -87,10 +78,6 @@ def build_manifest() -> dict:
     manifest = dict(spec)
     manifest["portfolio_sha256"] = portfolio_sha256
     manifest["counts"] = {"families": len(FAMILIES), "slots": len(PORTFOLIO)}
-    manifest["_note"] = (
-        "Prompts + code authored from Struppek (arXiv:2602.14689); baseline from Kuo "
-        "(arXiv:2605.26526). portfolio_sha256 is the frozen preregistration hash."
-    )
     return manifest
 
 

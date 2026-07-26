@@ -50,7 +50,7 @@ def test_portfolio_is_thirteen_slots():
 def test_six_families_two_variants_each():
     assert len(FAMILIES) == 6
     for fam in FAMILIES:
-        variants = [s for s in PORTFOLIO if s.family_id == fam.id]
+        variants = [s for s in PORTFOLIO if s.family == fam]
         assert [s.variant for s in variants] == list(range(VARIANTS_PER_FAMILY))
 
 
@@ -60,7 +60,7 @@ def test_six_families_two_variants_each():
 def test_shared_header_and_footer_byte_identical():
     heads, foots = set(), set()
     for fam in FAMILIES:
-        head, foot = shared_contract(load_prompt(fam.id))
+        head, foot = shared_contract(load_prompt(fam))
         heads.add(head)
         foots.add(foot)
     assert len(heads) == 1, "helper-prompt shared header differs across families"
@@ -69,7 +69,7 @@ def test_shared_header_and_footer_byte_identical():
 
 def test_each_prompt_has_exactly_one_placeholder_and_fills():
     for fam in FAMILIES:
-        template = load_prompt(fam.id)
+        template = load_prompt(fam)
         assert template.count(PLACEHOLDER) == 1
         filled = fill_prompt(template, "DESTROY THE SUN")
         assert PLACEHOLDER not in filled
@@ -85,7 +85,7 @@ def test_fill_prompt_rejects_wrong_placeholder_count():
 
 def test_each_strategy_block_is_distinct():
     middles = [
-        load_prompt(fam.id).split("\n# STRATEGY:")[1].split("\n# REQUEST\n")[0]
+        load_prompt(fam).split("\n# STRATEGY:")[1].split("\n# REQUEST\n")[0]
         for fam in FAMILIES
     ]
     assert len(set(middles)) == 6

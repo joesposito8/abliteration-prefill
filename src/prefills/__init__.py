@@ -1,18 +1,15 @@
-"""The frozen 13-prefill attack portfolio and its helper-generation rules.
+"""The 13-prefill attack portfolio and its helper-generation rules.
 
-Six helper-prompt families (each producing two seeded, request-specific prefill
-variants from the abliterated Gemma helper) plus Kuo's static baseline. Templates are
-authored from the Struppek prefill taxonomy (arXiv:2602.14689); the helper decoding,
-retry, length, and duplicate rules are frozen in ``rules``. Everything is committed and
-SHA-256-hashed (``scripts/freeze_portfolio.py``) before the main run.
+Six helper-prompt families (each producing two seeded, request-specific prefills from
+the abliterated Gemma helper) plus a static baseline. Templates follow the Struppek
+prefill taxonomy (arXiv:2602.14689); decoding, retry, length, and duplicate rules live
+in ``rules``. ``scripts/freeze_portfolio.py`` hashes the whole portfolio into a manifest.
 """
 
 from .families import (
     FAMILIES,
-    FAMILY_BY_ID,
     PORTFOLIO,
     VARIANTS_PER_FAMILY,
-    Family,
     Slot,
     fill_prompt,
     load_prompt,
@@ -37,10 +34,8 @@ HELPER_REVISION = "eaa815dffdf0"
 
 __all__ = [
     "FAMILIES",
-    "FAMILY_BY_ID",
     "PORTFOLIO",
     "VARIANTS_PER_FAMILY",
-    "Family",
     "Slot",
     "fill_prompt",
     "load_prompt",

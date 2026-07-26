@@ -1,20 +1,9 @@
-"""Shared manifest primitives: content hashing and canonical serialization.
+"""Shared manifest primitives for the freeze scripts: content hashing and serialization.
 
-Both freeze scripts (``build_datasets.py``, ``freeze_portfolio.py``) record artifacts
-as SHA-256 content hashes in a committed JSON manifest. Centralizing the operations
-that must stay byte-stable keeps the two builders from drifting.
-
-The field-tested pattern is *canonicalize for hashing, pretty-print for storage*:
-- ``sha256_file`` / ``sha256_bytes`` — per-artifact content digests.
-- ``canonical_bytes`` — the RFC 8785 (JSON Canonicalization Scheme) form used for
-  hashing, delegated to the ``rfc8785`` library (sorted keys, RFC-8785 number
-  normalization, no insignificant whitespace). It is the number normalization that
-  earns the dependency: the frozen sampling params are floats (1.0 / 0.95 / 0.0), which
-  ``json.dumps`` does not canonicalize. Imported lazily, so plain hashing/writing works
-  without it.
-- ``rollup_sha256`` — one digest over the canonical serialization of a spec (the
-  in-toto / OCI "digest of the manifest" pattern).
-- ``write_manifest`` — the pretty, key-sorted, diff-friendly form that gets committed.
+The pattern is canonicalize-for-hashing, pretty-print-for-storage. ``canonical_bytes``
+uses RFC 8785 (JSON Canonicalization Scheme) via ``rfc8785`` — its number normalization
+matters because some manifest values are floats, which ``json.dumps`` does not
+canonicalize. ``rfc8785`` is imported lazily, so hashing and writing work without it.
 """
 
 from __future__ import annotations
