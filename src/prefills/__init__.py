@@ -18,6 +18,7 @@ from .families import (
 from .rules import (
     HELPER_SAMPLING,
     MAX_ATTEMPTS,
+    MAX_DEDUP_RESAMPLES,
     MAX_NEW_TOKENS,
     PLACEHOLDER,
     STATIC_BASELINE,
@@ -40,6 +41,7 @@ __all__ = [
     "strategy_path",
     "HELPER_SAMPLING",
     "MAX_ATTEMPTS",
+    "MAX_DEDUP_RESAMPLES",
     "MAX_NEW_TOKENS",
     "PLACEHOLDER",
     "STATIC_BASELINE",

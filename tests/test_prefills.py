@@ -189,10 +189,9 @@ def test_produce_family_retries_recover_before_failure():
     assert results[0].reasons == ("attempt0:empty",)
 
 
-def test_produce_family_resamples_exact_duplicate_once():
-    # Both variants would be byte-identical (constant output); the second must trip the
-    # resample-once rule and draw again.
-    outputs = ["Sure, identical opener", "Sure, identical opener", "Sure, a different opener"]
+def test_produce_family_resamples_duplicate_until_distinct():
+    # Second variant duplicates the first twice, then a distinct draw lands.
+    outputs = ["opener A", "opener A", "opener A", "opener B"]
     state = {"i": 0}
 
     def gen(prompt, seed):
@@ -203,6 +202,15 @@ def test_produce_family_resamples_exact_duplicate_once():
     results = produce_family("role_chaining", "PROMPT", 2, gen)
     assert results[1].resampled_dup
     assert results[0].prefill != results[1].prefill
+
+
+def test_produce_family_accepts_duplicate_when_helper_never_varies():
+    def gen(prompt, seed):
+        return "the one and only opener"  # every draw identical
+
+    results = produce_family("continuation_partial", "PROMPT", 7, gen)
+    assert results[1].resampled_dup
+    assert results[1].prefill == results[0].prefill  # gave up after the budget
 
 
 def test_produce_family_resamples_when_duplicating_static_baseline():
