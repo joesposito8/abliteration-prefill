@@ -12,14 +12,18 @@ Run:  python scripts/freeze_portfolio.py
 
 from __future__ import annotations
 
-import hashlib
-import json
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
+from study.manifest import (  # noqa: E402
+    rollup_sha256,
+    sha256_bytes,
+    sha256_file,
+    write_manifest,
+)
 from prefills import (  # noqa: E402
     FAMILIES,
     FIXED_FALLBACK,
@@ -41,14 +45,6 @@ MANIFEST_PATH = REPO / "data" / "portfolio_manifest.json"
 CODE_FILES = ("rules.py", "families.py", "__init__.py")
 
 
-def _sha256_bytes(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def _sha256_file(path: Path) -> str:
-    return _sha256_bytes(path.read_bytes())
-
-
 def build_manifest() -> dict:
     """The full manifest dict, including per-file hashes and the roll-up hash."""
     prompt_dir = prompt_path(FAMILIES[0].id).parent
@@ -58,13 +54,13 @@ def build_manifest() -> dict:
         {
             "id": f.id,
             "prompt_file": f.prompt_file,
-            "sha256": _sha256_file(prompt_path(f.id)),
+            "sha256": sha256_file(prompt_path(f.id)),
             "struppek_definition": f.struppek_definition,
             "review_note": f.review_note,
         }
         for f in FAMILIES
     ]
-    code = {name: _sha256_file(code_dir / name) for name in CODE_FILES}
+    code = {name: sha256_file(code_dir / name) for name in CODE_FILES}
 
     rules = {
         "helper_model": HELPER_MODEL,
@@ -75,7 +71,7 @@ def build_manifest() -> dict:
         "variants_per_family": VARIANTS_PER_FAMILY,
         "fixed_fallback": FIXED_FALLBACK,
         "static_baseline": STATIC_BASELINE,
-        "static_baseline_sha256": _sha256_bytes(STATIC_BASELINE.encode("utf-8")),
+        "static_baseline_sha256": sha256_bytes(STATIC_BASELINE.encode("utf-8")),
         "prompt_placeholder": PLACEHOLDER,
     }
 
@@ -86,9 +82,7 @@ def build_manifest() -> dict:
         "rules": rules,
         "slots": [s.slot_id for s in PORTFOLIO],
     }
-    portfolio_sha256 = _sha256_bytes(
-        json.dumps(spec, sort_keys=True, ensure_ascii=False).encode("utf-8")
-    )
+    portfolio_sha256 = rollup_sha256(spec)
 
     manifest = dict(spec)
     manifest["portfolio_sha256"] = portfolio_sha256
@@ -102,10 +96,7 @@ def build_manifest() -> dict:
 
 def main() -> None:
     manifest = build_manifest()
-    MANIFEST_PATH.write_text(
-        json.dumps(manifest, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    write_manifest(MANIFEST_PATH, manifest)
     print(f"froze portfolio -> {MANIFEST_PATH}")
     print(f"  portfolio_sha256: {manifest['portfolio_sha256']}")
     for fam in manifest["families"]:

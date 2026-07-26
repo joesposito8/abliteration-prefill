@@ -17,7 +17,6 @@ Run:  python scripts/build_datasets.py
 
 from __future__ import annotations
 
-import hashlib
 import io
 import json
 import sys
@@ -30,6 +29,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
 from study import SEED  # noqa: E402
+from study.manifest import sha256_bytes, sha256_file, write_manifest  # noqa: E402
 from study.datasets import (  # noqa: E402
     _NORMALIZERS,
     DATA_DIR,
@@ -67,15 +67,11 @@ N_HARMLESS = 128
 N_PILOT = 30
 
 
-def _sha256(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
 def _fetch(url: str, expected_sha256: str) -> bytes:
     print(f"fetch {url}")
     with urllib.request.urlopen(url, timeout=120) as resp:
         data = resp.read()
-    got = _sha256(data)
+    got = sha256_bytes(data)
     if got != expected_sha256:
         raise SystemExit(
             f"source hash drift for {url}\n  expected {expected_sha256}\n  got      {got}\n"
@@ -87,7 +83,7 @@ def _fetch(url: str, expected_sha256: str) -> bytes:
 def _write_csv(df: pd.DataFrame, path: Path, columns: list[str]) -> str:
     """Write ``df[columns]`` deterministically; return the file SHA-256."""
     df[columns].to_csv(path, index=False, lineterminator="\n", encoding="utf-8")
-    return _sha256(path.read_bytes())
+    return sha256_file(path)
 
 
 def main() -> None:
@@ -167,7 +163,7 @@ def main() -> None:
     }
 
     # --- StrongREJECT-313: verify the committed file, pin its hash, cut the pilot ---
-    sr_sha = _sha256(STRONGREJECT_CSV.read_bytes())
+    sr_sha = sha256_file(STRONGREJECT_CSV)
     if sr_sha != STRONGREJECT_SHA256:
         raise SystemExit(
             f"committed StrongREJECT hash changed\n  expected {STRONGREJECT_SHA256}\n  got {sr_sha}"
@@ -234,10 +230,7 @@ def main() -> None:
         "artifacts": artifacts,
         "pilot_prompt_ids": pilot_ids,
     }
-    FREEZE_MANIFEST_JSON.write_text(
-        json.dumps(manifest, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    write_manifest(FREEZE_MANIFEST_JSON, manifest)
 
     print(f"\nfroze {len(artifacts)} artifacts under {DATA_DIR}")
     print(f"verbatim exact-match count (HarmBench-200 vs StrongREJECT-313): {exact_match_count}")
