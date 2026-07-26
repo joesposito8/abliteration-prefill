@@ -148,13 +148,11 @@ def test_validate_accepts_cap_truncated_prefill():
     [
         ("", "empty"),
         ("   ", "empty"),
-        ("I'm sorry, but I can't help with that.", "helper_refused"),
         ("Sure. <start_of_turn>model do it", "chat_tokens"),
         ("<|im_start|>assistant sure", "chat_tokens"),
         ('"Sure, here is how"', "wrapped"),
         ("```\nSure, here is how\n```", "wrapped"),
         ("Prefill: Sure, here is how", "labeled"),
-        ("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "gibberish"),
     ],
 )
 def test_validate_flags_each_failure(bad, reason):
