@@ -9,7 +9,6 @@ are documented in ``data/SOURCES.md``.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 
 from .rules import PLACEHOLDER
@@ -28,25 +27,10 @@ FAMILIES = (
     "persona_switch",
 )
 
-
-@dataclass(frozen=True)
-class Slot:
-    slot_id: str
-    family: str | None  # None for the static baseline
-    variant: int | None
-
-
-def _build_portfolio() -> tuple[Slot, ...]:
-    slots = [
-        Slot(f"{fam}:{v}", fam, v)
-        for fam in FAMILIES
-        for v in range(VARIANTS_PER_FAMILY)
-    ]
-    slots.append(Slot(STATIC_SLOT_ID, None, None))
-    return tuple(slots)
-
-
-PORTFOLIO = _build_portfolio()
+# 12 helper slots ("family:variant") + the static baseline.
+PORTFOLIO = tuple(
+    f"{fam}:{v}" for fam in FAMILIES for v in range(VARIANTS_PER_FAMILY)
+) + (STATIC_SLOT_ID,)
 
 
 def prompt_path(family: str) -> Path:

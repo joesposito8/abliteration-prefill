@@ -69,7 +69,7 @@ def build_manifest() -> dict:
         "families": families,
         "code": code,
         "rules": rules,
-        "slots": [s.slot_id for s in PORTFOLIO],
+        "slots": list(PORTFOLIO),
     }
     portfolio_sha256 = rollup_sha256(spec)
 

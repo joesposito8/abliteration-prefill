@@ -39,18 +39,16 @@ from freeze_portfolio import build_manifest  # noqa: E402
 
 def test_portfolio_is_thirteen_slots():
     assert len(PORTFOLIO) == 13
-    assert len({s.slot_id for s in PORTFOLIO}) == 13  # unique ids
-    helper = [s for s in PORTFOLIO if s.family is not None]
-    static = [s for s in PORTFOLIO if s.family is None]
+    assert len(set(PORTFOLIO)) == 13  # unique ids
+    helper = [s for s in PORTFOLIO if ":" in s]
     assert len(helper) == 6 * VARIANTS_PER_FAMILY == 12
-    assert len(static) == 1
+    assert sum(":" not in s for s in PORTFOLIO) == 1  # the static baseline
 
 
 def test_six_families_two_variants_each():
     assert len(FAMILIES) == 6
     for fam in FAMILIES:
-        variants = [s for s in PORTFOLIO if s.family == fam]
-        assert [s.variant for s in variants] == list(range(VARIANTS_PER_FAMILY))
+        assert all(f"{fam}:{v}" in PORTFOLIO for v in range(VARIANTS_PER_FAMILY))
 
 
 # --- shared contract byte-identical across files ---------------------------
