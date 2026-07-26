@@ -47,7 +47,7 @@ def _build_portfolio() -> tuple[Slot, ...]:
     return tuple(slots)
 
 
-PORTFOLIO = _build_portfolio()  # 6 x 2 + 1 = 13
+PORTFOLIO = _build_portfolio()
 
 
 def prompt_path(family: str) -> Path:
