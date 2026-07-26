@@ -23,6 +23,7 @@ from study.manifest import (  # noqa: E402
     write_manifest,
 )
 from prefills import (  # noqa: E402
+    CONTRACT_PATH,
     FAMILIES,
     HELPER_MODEL,
     HELPER_REVISION,
@@ -33,7 +34,7 @@ from prefills import (  # noqa: E402
     PORTFOLIO,
     STATIC_BASELINE,
     VARIANTS_PER_FAMILY,
-    prompt_path,
+    strategy_path,
 )
 
 MANIFEST_PATH = REPO / "data" / "portfolio_manifest.json"
@@ -47,10 +48,11 @@ def build_manifest() -> dict:
     code_dir = REPO / "src" / "prefills"
 
     families = [
-        {"id": fam, "prompt_file": f"{fam}.txt", "sha256": sha256_file(prompt_path(fam))}
+        {"id": fam, "prompt_file": f"{fam}.txt", "sha256": sha256_file(strategy_path(fam))}
         for fam in FAMILIES
     ]
     code = {name: sha256_file(code_dir / name) for name in CODE_FILES}
+    contract_sha256 = sha256_file(CONTRACT_PATH)
 
     rules = {
         "helper_model": HELPER_MODEL,
@@ -66,6 +68,7 @@ def build_manifest() -> dict:
 
     # The spec that the roll-up hash covers: file hashes + frozen rule values + slots.
     spec = {
+        "contract_sha256": contract_sha256,
         "families": families,
         "code": code,
         "rules": rules,

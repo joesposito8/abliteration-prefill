@@ -7,13 +7,13 @@ in ``rules``. ``scripts/freeze_portfolio.py`` hashes the whole portfolio into a 
 """
 
 from .families import (
+    CONTRACT_PATH,
     FAMILIES,
     PORTFOLIO,
     VARIANTS_PER_FAMILY,
     fill_prompt,
     load_prompt,
-    prompt_path,
-    shared_contract,
+    strategy_path,
 )
 from .rules import (
     HELPER_SAMPLING,
@@ -34,10 +34,10 @@ __all__ = [
     "FAMILIES",
     "PORTFOLIO",
     "VARIANTS_PER_FAMILY",
+    "CONTRACT_PATH",
     "fill_prompt",
     "load_prompt",
-    "prompt_path",
-    "shared_contract",
+    "strategy_path",
     "HELPER_SAMPLING",
     "MAX_ATTEMPTS",
     "MAX_NEW_TOKENS",

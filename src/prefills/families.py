@@ -1,10 +1,10 @@
 """The 13 portfolio slots: six helper-prompt families x two seeded variants, plus the
 static baseline.
 
-Each family has a self-contained helper prompt under ``prompts/`` named after the family
-id. The prompts share a byte-identical header, output rules, and request footer; only the
-strategy block and worked example differ. Each family's basis and any example deviation
-are documented in ``data/SOURCES.md``.
+The helper prompt is assembled from ``prompts/contract.txt`` (the shared wrapper with a
+{strategy} slot and the request slot) and ``prompts/<family>.txt`` (that family's strategy
+block and worked example). Each family's basis and any example deviation are documented in
+``data/SOURCES.md``.
 """
 
 from __future__ import annotations
@@ -33,12 +33,20 @@ PORTFOLIO = tuple(
 ) + (STATIC_SLOT_ID,)
 
 
-def prompt_path(family: str) -> Path:
+CONTRACT_PATH = PROMPTS_DIR / "contract.txt"
+STRATEGY_SLOT = "{strategy}"
+
+
+def strategy_path(family: str) -> Path:
     return PROMPTS_DIR / f"{family}.txt"
 
 
 def load_prompt(family: str) -> str:
-    return prompt_path(family).read_text(encoding="utf-8")
+    """The full helper prompt: the shared contract with this family's strategy block
+    inserted. Still contains the request slot for ``fill_prompt``."""
+    contract = CONTRACT_PATH.read_text(encoding="utf-8")
+    strategy = strategy_path(family).read_text(encoding="utf-8").strip()
+    return contract.replace(STRATEGY_SLOT, strategy)
 
 
 def fill_prompt(template: str, forbidden_prompt: str) -> str:
@@ -47,15 +55,3 @@ def fill_prompt(template: str, forbidden_prompt: str) -> str:
     if template.count(PLACEHOLDER) != 1:
         raise ValueError(f"expected one {PLACEHOLDER!r}, found {template.count(PLACEHOLDER)}")
     return template.replace(PLACEHOLDER, forbidden_prompt)
-
-
-def shared_contract(template: str) -> tuple[str, str]:
-    """Split a prompt into (header, footer) around its family-specific middle, so the
-    shared parts can be checked identical across families."""
-    head, sep, rest = template.partition("\n# STRATEGY:")
-    if not sep:
-        raise ValueError("prompt has no '# STRATEGY:' block")
-    _, fsep, foot = rest.partition("\n# REQUEST\n")
-    if not fsep:
-        raise ValueError("prompt has no '# REQUEST' footer")
-    return head, "\n# REQUEST\n" + foot

@@ -1,8 +1,8 @@
 """Offline invariants for the frozen 13-prefill portfolio — no GPU, no network, no API.
 
-Covers the portfolio shape, the byte-identical shared contract across the six prompt
-files, placeholder substitution, the static baseline, seed determinism, each validator,
-the produce loop (retry / fallback / duplicate resample), and the freeze hashing.
+Covers the portfolio shape, prompt assembly and placeholder substitution, the static
+baseline, seed determinism, each validator, the produce loop (retry / failure / duplicate
+resample), and the freeze hashing.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "scripts"))
 
 from prefills import (
+    CONTRACT_PATH,
     FAMILIES,
     HELPER_SAMPLING,
     MAX_ATTEMPTS,
@@ -29,7 +30,7 @@ from prefills import (
     produce_family,
     validate,
 )
-from prefills.families import shared_contract
+from prefills.families import STRATEGY_SLOT, strategy_path
 
 from freeze_portfolio import build_manifest  # noqa: E402
 
@@ -51,29 +52,26 @@ def test_six_families_two_variants_each():
         assert all(f"{fam}:{v}" in PORTFOLIO for v in range(VARIANTS_PER_FAMILY))
 
 
-# --- shared contract byte-identical across files ---------------------------
+# --- prompt assembly -------------------------------------------------------
 
 
-def test_shared_header_and_footer_byte_identical():
-    heads, foots = set(), set()
+def test_contract_has_one_strategy_slot_and_one_request_slot():
+    contract = CONTRACT_PATH.read_text(encoding="utf-8")
+    assert contract.count(STRATEGY_SLOT) == 1
+    assert contract.count(PLACEHOLDER) == 1
+
+
+def test_load_prompt_assembles_strategy_into_contract():
     for fam in FAMILIES:
-        head, foot = shared_contract(load_prompt(fam))
-        heads.add(head)
-        foots.add(foot)
-    assert len(heads) == 1, "helper-prompt shared header differs across families"
-    assert len(foots) == 1, "helper-prompt request footer differs across families"
+        prompt = load_prompt(fam)
+        assert STRATEGY_SLOT not in prompt  # strategy slot filled
+        assert prompt.count(PLACEHOLDER) == 1  # request slot still open
+        assert strategy_path(fam).read_text(encoding="utf-8").strip() in prompt
 
 
-def test_each_prompt_has_exactly_one_placeholder_and_fills():
-    for fam in FAMILIES:
-        template = load_prompt(fam)
-        assert template.count(PLACEHOLDER) == 1
-        filled = fill_prompt(template, "DESTROY THE SUN")
-        assert PLACEHOLDER not in filled
-        assert "DESTROY THE SUN" in filled
-
-
-def test_fill_prompt_rejects_wrong_placeholder_count():
+def test_fill_prompt_substitutes_and_rejects_wrong_count():
+    filled = fill_prompt(load_prompt("system_simulation"), "DESTROY THE SUN")
+    assert PLACEHOLDER not in filled and "DESTROY THE SUN" in filled
     with pytest.raises(ValueError):
         fill_prompt("no placeholder here", "x")
     with pytest.raises(ValueError):
@@ -81,11 +79,8 @@ def test_fill_prompt_rejects_wrong_placeholder_count():
 
 
 def test_each_strategy_block_is_distinct():
-    middles = [
-        load_prompt(fam).split("\n# STRATEGY:")[1].split("\n# REQUEST\n")[0]
-        for fam in FAMILIES
-    ]
-    assert len(set(middles)) == 6
+    blocks = [strategy_path(fam).read_text(encoding="utf-8") for fam in FAMILIES]
+    assert len(set(blocks)) == 6
 
 
 # --- static baseline -------------------------------------------------------
