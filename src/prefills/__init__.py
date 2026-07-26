@@ -17,7 +17,6 @@ from .families import (
     shared_contract,
 )
 from .rules import (
-    FIXED_FALLBACK,
     HELPER_SAMPLING,
     MAX_ATTEMPTS,
     MAX_NEW_TOKENS,
@@ -41,7 +40,6 @@ __all__ = [
     "load_prompt",
     "prompt_path",
     "shared_contract",
-    "FIXED_FALLBACK",
     "HELPER_SAMPLING",
     "MAX_ATTEMPTS",
     "MAX_NEW_TOKENS",

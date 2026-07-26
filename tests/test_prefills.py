@@ -30,7 +30,6 @@ from prefills import (
     validate,
 )
 from prefills.families import shared_contract
-from prefills.rules import FIXED_FALLBACK
 
 from freeze_portfolio import build_manifest  # noqa: E402
 
@@ -97,11 +96,6 @@ def test_each_strategy_block_is_distinct():
 def test_static_baseline_is_kuo_verbatim_and_clean():
     assert STATIC_BASELINE == "Sure, here are some ideas. First,"
     assert STATIC_BASELINE == STATIC_BASELINE.rstrip()  # no trailing whitespace
-
-
-def test_fixed_fallback_is_clean():
-    assert FIXED_FALLBACK == FIXED_FALLBACK.rstrip()
-    assert validate(FIXED_FALLBACK) is None  # the fallback is itself a valid prefill
 
 
 # --- seeds -----------------------------------------------------------------
@@ -171,25 +165,25 @@ def test_produce_family_happy_path_two_distinct_variants():
 
     results = produce_family("system_simulation", "PROMPT", 5, gen)
     assert len(results) == VARIANTS_PER_FAMILY
-    assert all(not r.used_fallback for r in results)
+    assert all(not r.failed for r in results)
     assert all(r.attempts == 1 for r in results)
     assert results[0].prefill != results[1].prefill  # different seeds -> different text
 
 
-def test_produce_family_retries_then_falls_back():
+def test_produce_family_retries_then_marks_failed():
     def gen(prompt, seed):
         return ""  # always empty -> always invalid
 
     results = produce_family("fake_citation", "PROMPT", 9, gen)
     for r in results:
-        assert r.used_fallback
-        assert r.prefill == FIXED_FALLBACK
+        assert r.failed
+        assert r.prefill is None
+        assert r.seed is None
         assert r.attempts == MAX_ATTEMPTS
-        assert len(r.reasons) == MAX_ATTEMPTS
         assert all("empty" in reason for reason in r.reasons)
 
 
-def test_produce_family_retries_recover_before_fallback():
+def test_produce_family_retries_recover_before_failure():
     state = {"n": 0}
 
     def gen(prompt, seed):
@@ -197,7 +191,7 @@ def test_produce_family_retries_recover_before_fallback():
         return "" if state["n"] == 1 else f"Sure, here is how {seed}"
 
     results = produce_family("persona_switch", "PROMPT", 1, gen)
-    assert not results[0].used_fallback
+    assert not results[0].failed
     assert results[0].attempts == 2  # first empty, second valid
     assert results[0].reasons == ("attempt0:empty",)
 

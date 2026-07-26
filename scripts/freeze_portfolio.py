@@ -24,7 +24,6 @@ from study.manifest import (  # noqa: E402
 )
 from prefills import (  # noqa: E402
     FAMILIES,
-    FIXED_FALLBACK,
     HELPER_MODEL,
     HELPER_REVISION,
     HELPER_SAMPLING,
@@ -60,7 +59,6 @@ def build_manifest() -> dict:
         "max_new_tokens": MAX_NEW_TOKENS,
         "max_attempts": MAX_ATTEMPTS,
         "variants_per_family": VARIANTS_PER_FAMILY,
-        "fixed_fallback": FIXED_FALLBACK,
         "static_baseline": STATIC_BASELINE,
         "static_baseline_sha256": sha256_bytes(STATIC_BASELINE.encode("utf-8")),
         "prompt_placeholder": PLACEHOLDER,
