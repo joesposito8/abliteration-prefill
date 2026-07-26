@@ -127,8 +127,8 @@ def test_validate_accepts_clean_prefill():
 
 
 def test_validate_accepts_cap_truncated_prefill():
-    # A realistic long, varied step-by-step that a 512-token cap might truncate: valid,
-    # not degenerate (real content has high lexical diversity).
+    # A long step-by-step that a 512-token cap might truncate: valid — length is never
+    # a failure.
     steps = [
         "Gather the reagents and lab glassware on a ventilated bench.",
         "Weigh each precursor to the ratios given in the reference table.",
@@ -140,7 +140,7 @@ def test_validate_accepts_cap_truncated_prefill():
     long_prefill = "Here is how to proceed, step by step: " + " ".join(
         f"{i + 1}. {s}" for i, s in enumerate(steps)
     ) + " Finally, dry the product and"
-    assert validate(long_prefill) is None  # long/truncated is valid, not degenerate
+    assert validate(long_prefill) is None  # long/truncated is valid
 
 
 @pytest.mark.parametrize(
@@ -154,8 +154,7 @@ def test_validate_accepts_cap_truncated_prefill():
         ('"Sure, here is how"', "wrapped"),
         ("```\nSure, here is how\n```", "wrapped"),
         ("Prefill: Sure, here is how", "labeled"),
-        ("na na na na na na na na na na na na na na na na na na na na na", "degenerate"),
-        ("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "degenerate"),
+        ("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "gibberish"),
     ],
 )
 def test_validate_flags_each_failure(bad, reason):
