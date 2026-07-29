@@ -86,6 +86,35 @@ def _write_csv(df: pd.DataFrame, path: Path, columns: list[str]) -> str:
     return sha256_file(path)
 
 
+def _assert_frozen_hashes_unchanged(artifacts: dict[str, dict]) -> None:
+    """Abort if a rebuild changed an artifact that was already frozen.
+
+    The build rewrites every CSV and the manifest together, so a drifted draw would
+    re-freeze itself: the new file and the new hash agree, and every downstream check
+    still passes. Comparing against the COMMITTED manifest is what makes re-running
+    this script a real reproduction test rather than a regeneration. Nothing here
+    protects the pinned upstream sources — ``_fetch`` already does that — this catches
+    a changed *derivation*, e.g. an edited pool filter silently reshuffling the draw.
+    """
+    if not FREEZE_MANIFEST_JSON.exists():
+        return  # first build; there is nothing frozen yet
+    frozen = json.loads(FREEZE_MANIFEST_JSON.read_text())["artifacts"]
+    drifted = [
+        f"  {name}\n    frozen {frozen[name]['sha256']}\n    built  {meta['sha256']}"
+        for name, meta in sorted(artifacts.items())
+        if name in frozen and frozen[name]["sha256"] != meta["sha256"]
+    ]
+    if drifted:
+        raise SystemExit(
+            "REBUILD CHANGED A FROZEN ARTIFACT — refusing to re-freeze:\n"
+            + "\n".join(drifted)
+            + "\n\nThe committed CSVs on disk have been overwritten; restore them with"
+            "\n  git checkout -- data/"
+            "\nIf this change is intentional, remove the artifact's entry from"
+            f"\n  {FREEZE_MANIFEST_JSON}\nand rebuild, so re-freezing is a deliberate act."
+        )
+
+
 def main() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     artifacts: dict[str, dict] = {}
@@ -195,6 +224,9 @@ def main() -> None:
     }
     exact_match_count = verbatim["harmbench200_vs_strongreject313"]["none"]
     assert exact_match_count == 0, f"expected 0 verbatim overlap, got {exact_match_count}"
+
+    # Every artifact is built; nothing is committed to the manifest until this passes.
+    _assert_frozen_hashes_unchanged(artifacts)
 
     manifest = {
         "seed": SEED,

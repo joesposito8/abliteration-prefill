@@ -7,9 +7,11 @@ from ``SEED`` via the same ``study.datasets`` helpers the build used.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 
 import pandas as pd
+import pytest
 
 from study import SEED
 from study.datasets import (
@@ -30,6 +32,7 @@ from study.datasets import (
 )
 
 MANIFEST = json.loads(FREEZE_MANIFEST_JSON.read_text())
+REPO = FREEZE_MANIFEST_JSON.parents[1]
 
 
 def _sha256(path) -> str:
@@ -98,6 +101,27 @@ def test_pilot_reproduces_from_seed():
     sr = load_strongreject().set_index("prompt_id")
     for _, row in committed.iterrows():
         assert row["forbidden_prompt"] == sr.loc[row["prompt_id"], "forbidden_prompt"]
+
+
+def test_rebuild_refuses_to_refreeze_a_changed_artifact():
+    """A drifted derivation must abort the build, not re-freeze itself.
+
+    The build rewrites the CSVs and the manifest together, so without this guard a
+    changed draw produces a self-consistent pair that every other check accepts.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "build_datasets", REPO / "scripts" / "build_datasets.py"
+    )
+    build_datasets = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(build_datasets)
+
+    frozen = MANIFEST["artifacts"]
+    build_datasets._assert_frozen_hashes_unchanged(frozen)  # unchanged: silent
+
+    drifted = {name: dict(meta) for name, meta in frozen.items()}
+    drifted[EXTRACTION_HARMLESS_CSV.name]["sha256"] = "0" * 64
+    with pytest.raises(SystemExit, match="REBUILD CHANGED A FROZEN ARTIFACT"):
+        build_datasets._assert_frozen_hashes_unchanged(drifted)
 
 
 def test_prompt_id_is_row_index():
