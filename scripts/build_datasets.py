@@ -87,14 +87,12 @@ def _write_csv(df: pd.DataFrame, path: Path, columns: list[str]) -> str:
 
 
 def _assert_frozen_hashes_unchanged(artifacts: dict[str, dict]) -> None:
-    """Abort if a rebuild changed an artifact that was already frozen.
+    """Abort if a rebuild changed an already-frozen artifact.
 
-    The build rewrites every CSV and the manifest together, so a drifted draw would
-    re-freeze itself: the new file and the new hash agree, and every downstream check
-    still passes. Comparing against the COMMITTED manifest is what makes re-running
-    this script a real reproduction test rather than a regeneration. Nothing here
-    protects the pinned upstream sources — ``_fetch`` already does that — this catches
-    a changed *derivation*, e.g. an edited pool filter silently reshuffling the draw.
+    The build rewrites the CSVs and the manifest together, so a drifted draw would
+    re-freeze itself with every downstream check still passing. Comparing against the
+    committed manifest is what makes a rebuild a reproduction test. Catches a changed
+    derivation, not a changed source — ``_fetch`` already guards the pinned upstreams.
     """
     if not FREEZE_MANIFEST_JSON.exists():
         return  # first build; there is nothing frozen yet
@@ -225,8 +223,7 @@ def main() -> None:
     exact_match_count = verbatim["harmbench200_vs_strongreject313"]["none"]
     assert exact_match_count == 0, f"expected 0 verbatim overlap, got {exact_match_count}"
 
-    # Every artifact is built; nothing is committed to the manifest until this passes.
-    _assert_frozen_hashes_unchanged(artifacts)
+    _assert_frozen_hashes_unchanged(artifacts)  # before anything reaches the manifest
 
     manifest = {
         "seed": SEED,

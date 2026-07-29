@@ -104,11 +104,7 @@ def test_pilot_reproduces_from_seed():
 
 
 def test_rebuild_refuses_to_refreeze_a_changed_artifact():
-    """A drifted derivation must abort the build, not re-freeze itself.
-
-    The build rewrites the CSVs and the manifest together, so without this guard a
-    changed draw produces a self-consistent pair that every other check accepts.
-    """
+    """A drifted derivation must abort the build, not re-freeze itself."""
     spec = importlib.util.spec_from_file_location(
         "build_datasets", REPO / "scripts" / "build_datasets.py"
     )
