@@ -11,11 +11,16 @@ filled in as each piece lands.
 ## Setup
 
 ```bash
-uv sync --extra dev           # openai, pandas, pytest, transformers (no torch)
+uv sync --extra dev           # openai, pandas, pytest, transformers, inspect-ai (no torch)
 export OPENAI_API_KEY=...     # for grading API calls
 ```
 
-Generation additionally needs a GPU and `pip install -e ".[gpu]"`; see below.
+Python 3.12 is pinned in `.python-version`; `uv sync` provisions it. Generation
+additionally needs a GPU and `uv sync --extra gpu`; see below.
+
+Run everything through `uv run`. It re-syncs from `uv.lock` first, which is what holds
+the pinned versions in effect — a bare `python` resolves whatever the ambient
+interpreter happens to have.
 
 ## Grading (implemented)
 
@@ -60,16 +65,19 @@ otherwise be inherited silently.
 Any ~16GB+ CUDA GPU runs the 4B model in BF16:
 
 ```bash
-pip install -e ".[gpu]"
+uv sync --extra gpu                   # torch comes from the lock, not the host image
 export HF_HOME=/workspace/hf          # keep the model cache on persistent storage
-python -c "from generation import load_model, generate; \
+uv run python -c "from generation import load_model, generate; \
 m,t = load_model(); print(generate(m, t, 'Say hi.', seed=1).continuation)"
 ```
 
-Reference environment this was validated on: NVIDIA A100 80GB, torch 2.7.1+cu128,
-transformers 5.14.1, BF16, ~8 GB peak, ~29 tok/s single-stream. The base model is
-36 layers with `self_attn.o_proj` / `mlp.down_proj` on each — the modules the
-abliteration step edits.
+Reference environment: NVIDIA A100 80GB, Python 3.12, torch 2.13.0, transformers
+5.14.1, BF16. Throughput and peak-memory figures are re-measured on this stack during
+the harness pilot; the earlier torch 2.7.1 numbers (~8 GB peak, ~29 tok/s
+single-stream) are not carried forward, because a torch minor can change sampled
+tokens and so the reference environment moves with it. The base model is 36 layers
+with `self_attn.o_proj` / `mlp.down_proj` on each — the modules the abliteration step
+edits.
 
 ## Abliteration
 
@@ -117,7 +125,7 @@ actual Gemma call is injected as `generate_fn`, so the portfolio logic is offlin
 Freeze the portfolio (hash every prompt + rule into a manifest with one roll-up hash):
 
 ```bash
-python scripts/freeze_portfolio.py     # writes data/portfolio_manifest.json
+uv run python scripts/freeze_portfolio.py   # writes data/portfolio_manifest.json
 ```
 
 Sources and the two documented example deviations: `data/SOURCES.md`.
