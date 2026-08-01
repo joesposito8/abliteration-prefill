@@ -5,14 +5,12 @@ one is a mutable object passed in by the caller; and it renders with
 ``add_generation_prompt=True``, which closes the assistant turn, so a prefill would
 be answered rather than continued.
 
-The module and tokenizer arrive as ``model_args``. They reach this constructor as
-live objects but serialise to ``null`` in the log, which is what keeps edited
-weights out of log files — **do not add a serializer for them.**
+The module and tokenizer arrive as ``model_args``, reaching this constructor as live
+objects but serialising to ``null`` in the log, since JSON cannot hold them.
 
-Construction must therefore succeed without them, and not only for scoring passes
-rebuilt from a log: Inspect also builds a second, weightless instance during an
-ordinary run to resolve model info. Refusing here would break generation too, so
-only :meth:`generate` refuses.
+Construction must therefore succeed without them: ``score()`` rebuilds the model
+from the log before running any scorer, so demanding weights here would break every
+grading pass. Only :meth:`generate` refuses.
 
 Inspect memoises providers on the model name plus the *serialised* ``model_args``,
 and everything unserialisable serialises to ``None``. Two different modules under
