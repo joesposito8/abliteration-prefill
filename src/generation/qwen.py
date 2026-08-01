@@ -32,6 +32,7 @@ do the same, or it will average padding positions into the result.
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
 
@@ -143,6 +144,24 @@ def _decode(tokenizer, token_ids, pad_token_id):
     )
 
 
+def row_prefills(prefill: str | Sequence[str], count: int) -> list[str]:
+    """One prefill per message, broadcasting a single string.
+
+    The length is checked rather than left to ``zip``, which would truncate a short
+    sequence silently — pairing prefills with the wrong rows and returning ``output``
+    strings that do not match the text actually generated.
+    """
+    if isinstance(prefill, str):
+        return [prefill] * count
+    prefills = list(prefill)
+    if len(prefills) != count:
+        raise ValueError(
+            f"got {len(prefills)} prefills for {count} messages; pass one per "
+            "message, or a single string to use for all of them."
+        )
+    return prefills
+
+
 def _pad_token_id(model, tokenizer):
     """The id ``generate`` actually pads with, which need not be the tokenizer's."""
     configured = model.generation_config.pad_token_id
@@ -198,10 +217,14 @@ def generate_batch(
     messages: list[str],
     *,
     seed: int,
-    prefill: str = "",
+    prefill: str | Sequence[str] = "",
     decoding=DECODING,
 ) -> tuple[list[Generation], float]:
     """Generate one continuation per message in a single batched call.
+
+    ``prefill`` is one string applied to every row, or one per message. Rows need
+    not share a prefill: each is folded into its own prompt before tokenization, and
+    left padding already absorbs the resulting length differences.
 
     Returns ``(generations, batch_seconds)``. The seed applies to the batch as a
     whole: rows share one RNG stream, so an individual row is only reproducible by
@@ -210,7 +233,11 @@ def generate_batch(
     """
     import torch
 
-    prompts = [build_prompt(tokenizer, message, prefill) for message in messages]
+    prefills = row_prefills(prefill, len(messages))
+    prompts = [
+        build_prompt(tokenizer, message, row_prefill)
+        for message, row_prefill in zip(messages, prefills)
+    ]
     # Left padding keeps the prompt the same length for every row, so generated
     # tokens start at a single known offset.
     encoded = tokenizer(
@@ -230,13 +257,15 @@ def generate_batch(
     rows = outputs[:, padded_width:].tolist()
     prompt_lengths = encoded.attention_mask.sum(dim=1).tolist()
     generations = []
-    for index, (row, message) in enumerate(zip(rows, messages)):
+    for index, (row, message, row_prefill) in enumerate(
+        zip(rows, messages, prefills)
+    ):
         continuation, raw, new_tokens = _decode(tokenizer, row, pad_token_id)
         generations.append(
             Generation(
                 message=message,
-                prefill=prefill,
-                output=prefill + continuation,
+                prefill=row_prefill,
+                output=row_prefill + continuation,
                 continuation=continuation,
                 raw_continuation=raw,
                 seed=seed,

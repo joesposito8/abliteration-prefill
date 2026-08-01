@@ -22,7 +22,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import anyio
 from inspect_ai.model import (
     ChatMessage,
     ChatMessageAssistant,
@@ -34,7 +33,7 @@ from inspect_ai.model import (
 )
 from inspect_ai.tool import ToolChoice, ToolInfo
 
-IN_FLIGHT = 64
+from .batching import IN_FLIGHT, BatchGenerator
 
 
 class QwenLocalAPI(ModelAPI):
@@ -62,6 +61,7 @@ class QwenLocalAPI(ModelAPI):
         )
         self.module = module
         self.tokenizer = tokenizer
+        self._batcher = BatchGenerator(module, tokenizer)
 
         if tokenizer is not None:
             # Fail on a broken chat template now rather than after hours of generation.
@@ -95,22 +95,11 @@ class QwenLocalAPI(ModelAPI):
                 "weightless; pass module= and tokenizer= to the eval that generates."
             )
 
-        from generation.qwen import build_prompt, contains_thinking, generate_batch
+        from generation.qwen import build_prompt, contains_thinking
 
         prompt = build_prompt(self.tokenizer, message, prefill)
-
-        # generate_batch blocks on the GPU, which would stall every other sample
-        # sharing this event loop.
-        generations, seconds = await anyio.to_thread.run_sync(
-            lambda: generate_batch(
-                self.module,
-                self.tokenizer,
-                [message],
-                seed=seed,
-                prefill=prefill,
-            )
-        )
-        generation = generations[0]
+        row = await self._batcher.submit(message, prefill, seed)
+        generation = row.generation
 
         output = ModelOutput.from_content(
             model=self.model_name,
@@ -138,6 +127,10 @@ class QwenLocalAPI(ModelAPI):
             "thinking_leak": contains_thinking(generation.raw_continuation),
             "prefill": prefill,
             "seed": seed,
+            # Composition is arrival-dependent, so it is recorded rather than
+            # reproducible: a row is only replayable as part of the same batch.
+            "batch_size": row.batch_size,
+            "batch_index": row.batch_index,
         }
         return output, ModelCall.create(
             request={
@@ -149,7 +142,7 @@ class QwenLocalAPI(ModelAPI):
             response={
                 "continuation": generation.continuation,
                 "new_tokens": generation.new_tokens,
-                "batch_seconds": seconds,
+                "batch_seconds": row.seconds,
             },
         )
 

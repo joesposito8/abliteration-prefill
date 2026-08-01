@@ -112,3 +112,22 @@ def test_generate_takes_one_message_so_its_seed_is_reproducible():
 )
 def test_contains_thinking(text, expected):
     assert contains_thinking(text) is expected
+
+
+# --- per-row prefills ------------------------------------------------------
+
+
+def test_a_single_prefill_broadcasts_to_every_row():
+    assert qwen.row_prefills("Sure:", 3) == ["Sure:", "Sure:", "Sure:"]
+
+
+def test_one_prefill_per_row_is_kept_in_order():
+    assert qwen.row_prefills(["a", "", "c"], 3) == ["a", "", "c"]
+
+
+@pytest.mark.parametrize("prefills", [["a"], ["a", "b", "c", "d"]])
+def test_a_mismatched_prefill_count_raises_rather_than_truncating(prefills):
+    """`zip` would silently pair prefills with the wrong rows and return `output`
+    strings that do not match the text generated."""
+    with pytest.raises(ValueError, match="prefills for 3 messages"):
+        qwen.row_prefills(prefills, 3)

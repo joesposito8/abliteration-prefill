@@ -7,7 +7,7 @@ forward pass — so a failure means the harness is wrong rather than a fake is.
 from __future__ import annotations
 
 import pytest
-from generation.qwen import DECODING, THINKING_SENTINEL, Generation
+from generation.qwen import DECODING, THINKING_SENTINEL, Generation, row_prefills
 
 
 class FakeTokenizer:
@@ -46,6 +46,9 @@ def fake_generate_batch(monkeypatch):
     calls: list[dict] = []
 
     def fake(model, tok, messages, *, seed, prefill="", decoding=DECODING):
+        # The real broadcast-and-length-check, so the double cannot be more
+        # permissive than the function it replaces.
+        prefills = row_prefills(prefill, len(messages))
         calls.append(
             {
                 "messages": list(messages),
@@ -55,13 +58,13 @@ def fake_generate_batch(monkeypatch):
             }
         )
         generations = []
-        for message in messages:
+        for message, row_prefill in zip(messages, prefills):
             continuation = f" continuation for {message}"
             generations.append(
                 Generation(
                     message=message,
-                    prefill=prefill,
-                    output=prefill + continuation,
+                    prefill=row_prefill,
+                    output=row_prefill + continuation,
                     continuation=continuation,
                     raw_continuation=continuation + "<|im_end|>",
                     seed=seed,
