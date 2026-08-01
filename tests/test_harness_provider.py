@@ -1,18 +1,10 @@
-"""The provider's contract with Inspect, exercised without torch or a GPU.
-
-Three properties here are the ones that fail silently in production rather than
-loudly, so each gets a test of its own: a weightless rebuild must construct and only
-then refuse; the sampling parameters must be checked at the point of use, because an
-eval() keyword argument beats the task config; and the prefill must come back out of
-``completion`` exactly as it went in, since every downstream score is computed on the
-continuation the scorer strips off it.
-"""
+"""The provider's contract with Inspect, exercised without torch or a GPU."""
 
 from __future__ import annotations
 
 import anyio
 import pytest
-from generation.qwen import SAMPLING
+from generation.qwen import SAMPLING, Generation
 from harness.provider import IN_FLIGHT, QwenLocalAPI, split_prefill
 from inspect_ai.model import (
     ChatMessageAssistant,
@@ -42,6 +34,29 @@ async def generate(api: QwenLocalAPI, messages, cfg):
     return await api.generate(messages, tools=[], tool_choice="none", config=cfg)
 
 
+def run_eval(tmp_path, tokenizer, frozen_config_kwargs, **eval_kwargs):
+    """One sample through the real task/provider stack, returning the written log."""
+    from inspect_ai import Task, eval
+    from inspect_ai.dataset import MemoryDataset, Sample
+    from inspect_ai.solver import generate as generate_solver
+
+    task = Task(
+        dataset=MemoryDataset([Sample(id="000/none", input="q", target="")]),
+        solver=generate_solver(),
+        config=GenerateConfig(
+            **{"seed": SEED, "max_tokens": 512, **frozen_config_kwargs}
+        ),
+    )
+    return eval(
+        task,
+        model="qwen-local/base",
+        model_args={"module": object(), "tokenizer": tokenizer, "max_new_tokens": 512},
+        log_dir=str(tmp_path),
+        score=False,
+        **eval_kwargs,
+    )[0]
+
+
 # --- construction ----------------------------------------------------------
 
 
@@ -52,9 +67,7 @@ def test_constructs_weightless_without_complaint():
 
 
 def test_a_misspelled_model_arg_is_refused(tokenizer):
-    """Otherwise it is dropped and resurfaces later as a confusing missing-module error."""
-    from inspect_ai.model import get_model
-
+    """Otherwise it is dropped and resurfaces as a missing-module error much later."""
     with pytest.raises(TypeError, match="toknizer"):
         get_model("qwen-local/typo-check", toknizer=tokenizer, max_new_tokens=512)
 
@@ -62,23 +75,19 @@ def test_a_misspelled_model_arg_is_refused(tokenizer):
 def test_generate_refuses_when_weightless(frozen_config_kwargs):
     api = build()
     with pytest.raises(RuntimeError, match="holds no live module"):
-        anyio.run(generate, api, [ChatMessageUser(content="hi")], config(frozen_config_kwargs))
+        anyio.run(
+            generate, api, [ChatMessageUser(content="hi")], config(frozen_config_kwargs)
+        )
 
 
 def test_a_broken_chat_template_fails_at_construction(tokenizer):
-    """Cheap now beats discovering it after GPU-hours."""
     tokenizer.enable_thinking_honoured = False
     with pytest.raises(ValueError, match="empty-thinking sentinel"):
         build(tokenizer=tokenizer)
 
 
 def test_the_entry_point_registers_the_provider_and_defers_torch():
-    """Nothing here imports `harness._registry` — Inspect loads it via the entry point.
-
-    So this fails if the pyproject stanza is dropped, which would otherwise surface
-    as an unrecognised model name on the GPU box. Resolving must also not pull torch:
-    the factory hands back a class and imports nothing until a model is built.
-    """
+    """Nothing here imports `harness._registry`; Inspect loads it via the entry point."""
     model = get_model(
         "qwen-local/base",
         max_new_tokens=512,
@@ -106,7 +115,9 @@ def test_accepts_a_config_that_matches_the_frozen_set(
     [
         pytest.param({"temperature": 0.9}, id="named-field-override"),
         pytest.param({"top_p": 0.5}, id="top_p-override"),
-        pytest.param({"extra_body": {"min_p": 0.4, "do_sample": True}}, id="extra-body-override"),
+        pytest.param(
+            {"extra_body": {"min_p": 0.4, "do_sample": True}}, id="extra-body-override"
+        ),
         pytest.param({"extra_body": {"do_sample": True}}, id="extra-body-missing-min_p"),
         pytest.param({"extra_body": None}, id="extra-body-absent"),
     ],
@@ -114,7 +125,6 @@ def test_accepts_a_config_that_matches_the_frozen_set(
 def test_rejects_any_drift_from_the_frozen_set(
     tokenizer, fake_generate_batch, frozen_config_kwargs, overrides
 ):
-    """This is what an `eval(temperature=...)` kwarg looks like by the time it arrives."""
     api = build(tokenizer=tokenizer, module=object())
     with pytest.raises(ValueError, match="frozen sampling parameters"):
         anyio.run(
@@ -128,11 +138,7 @@ def test_rejects_any_drift_from_the_frozen_set(
 def test_the_comparison_is_against_qwen_sampling_itself(
     tokenizer, fake_generate_batch, frozen_config_kwargs, monkeypatch
 ):
-    """Closing the chain: the assertion reads the same constant generate_batch uses.
-
-    If the two could diverge, the config could be validated against one set of
-    parameters while the forward pass ran under another.
-    """
+    """Were they separate constants, the check could pass while the GPU ran otherwise."""
     monkeypatch.setattr("generation.qwen.SAMPLING", {**SAMPLING, "temperature": 0.123})
     api = build(tokenizer=tokenizer, module=object())
     with pytest.raises(ValueError, match="frozen sampling parameters"):
@@ -175,11 +181,16 @@ def test_a_seed_must_be_present(tokenizer, fake_generate_batch, frozen_config_kw
         )
 
 
-def test_any_seed_value_is_accepted(tokenizer, fake_generate_batch, frozen_config_kwargs):
-    """The provider must not know how the study derives seeds."""
+def test_any_seed_value_is_accepted(
+    tokenizer, fake_generate_batch, frozen_config_kwargs
+):
+    """The provider must stay ignorant of how seeds are derived."""
     api = build(tokenizer=tokenizer, module=object())
     anyio.run(
-        generate, api, [ChatMessageUser(content="q")], config(frozen_config_kwargs, seed=7)
+        generate,
+        api,
+        [ChatMessageUser(content="q")],
+        config(frozen_config_kwargs, seed=7),
     )
     assert fake_generate_batch[0]["seed"] == 7
 
@@ -206,7 +217,7 @@ def test_multi_turn_input_is_refused_rather_than_silently_truncated():
 def test_completion_is_prefill_plus_continuation(
     tokenizer, fake_generate_batch, frozen_config_kwargs
 ):
-    """The scorer strips the prefill back off this, so it must be a clean prefix."""
+    """The scorer strips the prefill back off, so it must be a clean prefix."""
     prefill = "Sure, here's how:"
     api = build(tokenizer=tokenizer, module=object())
     output, _ = anyio.run(
@@ -215,7 +226,6 @@ def test_completion_is_prefill_plus_continuation(
         [ChatMessageUser(content="q"), ChatMessageAssistant(content=prefill)],
         config(frozen_config_kwargs),
     )
-    assert output.completion.startswith(prefill)
     assert output.completion == prefill + " continuation for q"
     assert output.metadata["prefill"] == prefill
 
@@ -226,7 +236,7 @@ def test_completion_is_prefill_plus_continuation(
 def test_metadata_carries_raw_continuation_and_the_pad_cut_token_count(
     tokenizer, fake_generate_batch, frozen_config_kwargs
 ):
-    """Neither survives anywhere else: completion is cleaned, and usage is padded."""
+    """Neither survives elsewhere: completion is cleaned, and usage counts padding."""
     api = build(tokenizer=tokenizer, module=object())
     output, _ = anyio.run(
         generate, api, [ChatMessageUser(content="q")], config(frozen_config_kwargs)
@@ -239,17 +249,17 @@ def test_metadata_carries_raw_continuation_and_the_pad_cut_token_count(
 
 
 def test_a_thinking_leak_is_flagged(tokenizer, frozen_config_kwargs, monkeypatch):
-    """`<think>` survives skip_special_tokens, so a leak is detectable but not obvious."""
-    from generation.qwen import Generation
+    """`<think>` survives skip_special_tokens, so a leak is detectable but not visible."""
 
     def leaky(model, tok, messages, *, seed, prefill="", max_new_tokens=512):
+        text = "<think>hmm</think> ok"
         return [
             Generation(
                 message=messages[0],
                 prefill=prefill,
-                output="<think>hmm</think> ok",
-                continuation="<think>hmm</think> ok",
-                raw_continuation="<think>hmm</think> ok",
+                output=text,
+                continuation=text,
+                raw_continuation=text,
                 seed=seed,
                 prompt_tokens=3,
                 new_tokens=5,
@@ -268,8 +278,6 @@ def test_a_thinking_leak_is_flagged(tokenizer, frozen_config_kwargs, monkeypatch
 def test_truncation_shows_up_as_a_stop_reason(
     tokenizer, frozen_config_kwargs, monkeypatch
 ):
-    from generation.qwen import Generation
-
     def truncated(model, tok, messages, *, seed, prefill="", max_new_tokens=512):
         return [
             Generation(
@@ -296,41 +304,25 @@ def test_truncation_shows_up_as_a_stop_reason(
 def test_the_log_records_a_null_module(
     tmp_path, tokenizer, fake_generate_batch, frozen_config_kwargs
 ):
-    """Weight hygiene, end to end through a real eval.
-
-    A live module reaches the constructor but cannot be serialised, so Inspect's log
-    copy writes null. That is the guarantee no abliterated tensor can reach a log
-    file, and it is worth asserting rather than assuming — a serializer added here
-    would break it silently.
-    """
-    from inspect_ai import Task, eval
-    from inspect_ai.dataset import MemoryDataset, Sample
-    from inspect_ai.solver import generate as generate_solver
-
-    task = Task(
-        dataset=MemoryDataset([Sample(id="000/none", input="q", target="")]),
-        solver=generate_solver(),
-        config=GenerateConfig(**{"seed": SEED, "max_tokens": 512, **frozen_config_kwargs}),
-    )
-    log = eval(
-        task,
-        model="qwen-local/base",
-        model_args={"module": object(), "tokenizer": tokenizer, "max_new_tokens": 512},
-        log_dir=str(tmp_path),
-        score=False,
-    )[0]
+    """A serializer added for the module would break this silently."""
+    log = run_eval(tmp_path, tokenizer, frozen_config_kwargs)
 
     assert log.status == "success"
     assert log.eval.model_args["module"] is None
     assert log.eval.model_args["tokenizer"] is None
-    # max_new_tokens is a plain int, so unlike the weights it survives and can be
-    # read back — which is what lets a scoring pass rebuild a consistent provider.
     assert log.eval.model_args["max_new_tokens"] == 512
 
-    # The decoding provenance lives in EvalPlan.config, which is the MERGED config
-    # that actually ran. EvalSpec.model_generate_config holds only the model-level
-    # config — what eval(seed=...) or get_model(config=...) set — and is empty when
-    # everything comes from Task.config, as it does here.
+
+def test_decoding_provenance_lands_in_the_plan_config(
+    tmp_path, tokenizer, fake_generate_batch, frozen_config_kwargs
+):
+    """`plan.config` is the merged config that ran; `model_generate_config` is not.
+
+    The latter holds model-level settings only, and is empty when every value comes
+    from the task.
+    """
+    log = run_eval(tmp_path, tokenizer, frozen_config_kwargs)
+
     assert log.plan.config.seed == SEED
     assert log.plan.config.temperature == SAMPLING["temperature"]
     assert log.plan.config.top_p == SAMPLING["top_p"]
@@ -346,39 +338,18 @@ def test_the_log_records_a_null_module(
 def test_an_eval_kwarg_beats_the_task_config_and_the_provider_catches_it(
     tmp_path, tokenizer, fake_generate_batch, frozen_config_kwargs
 ):
-    """Why the sampling check lives at the point of use rather than in the task.
-
-    An eval() keyword argument wins the merge, so a task that declares the frozen
-    parameters is not by itself a guarantee that they are what ran.
-    """
-    from inspect_ai import Task, eval
-    from inspect_ai.dataset import MemoryDataset, Sample
-    from inspect_ai.solver import generate as generate_solver
-
-    task = Task(
-        dataset=MemoryDataset([Sample(id="000/none", input="q", target="")]),
-        solver=generate_solver(),
-        config=GenerateConfig(**{"seed": SEED, "max_tokens": 512, **frozen_config_kwargs}),
-    )
-    log = eval(
-        task,
-        model="qwen-local/base",
-        model_args={"module": object(), "tokenizer": tokenizer, "max_new_tokens": 512},
-        log_dir=str(tmp_path),
-        score=False,
-        temperature=0.9,  # would silently change the sampled distribution
-    )[0]
+    """Why the sampling check sits at the point of use rather than in the task."""
+    log = run_eval(tmp_path, tokenizer, frozen_config_kwargs, temperature=0.9)
 
     assert log.status == "error"
     assert "frozen sampling parameters" in str(log.error.message)
-    # It really did win the merge — the task's 0.7 is not what arrived.
     assert log.plan.config.temperature == 0.9
 
 
 def test_model_call_records_the_rendered_prompt(
     tokenizer, fake_generate_batch, frozen_config_kwargs
 ):
-    """The sentinel is what makes a prefill a continuation, so record it, not the raw turn."""
+    """The sentinel is what makes a prefill a continuation, so record it."""
     from generation.qwen import THINKING_SENTINEL
 
     api = build(tokenizer=tokenizer, module=object())

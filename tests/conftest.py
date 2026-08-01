@@ -1,9 +1,7 @@
 """Shared doubles for the harness tests.
 
-Everything here runs offline: no torch, no GPU, no API key. The fakes stand in for
-exactly the two things that cannot run locally — a tokenizer's chat template and a
-batched forward pass — and nothing else, so a failure means the harness is wrong
-rather than a fake is.
+Fakes cover only what cannot run locally — a tokenizer's chat template and a batched
+forward pass — so a failure means the harness is wrong rather than a fake is.
 """
 
 from __future__ import annotations
@@ -15,10 +13,8 @@ from generation.qwen import SAMPLING, THINKING_SENTINEL, Generation
 class FakeTokenizer:
     """Renders the shape ``build_prompt`` checks for, sentinel included.
 
-    A real Qwen3 template emits the empty-thinking sentinel only when
-    ``enable_thinking=False`` is passed explicitly, so this honours the flag the
-    same way: forget it and the sentinel is absent and ``build_prompt`` raises,
-    exactly as it would against the real tokenizer.
+    Honours ``enable_thinking`` the way the real template does, so forgetting the
+    flag fails here exactly as it would against the real tokenizer.
     """
 
     def __init__(self, *, enable_thinking_honoured: bool = True) -> None:
@@ -27,7 +23,9 @@ class FakeTokenizer:
     def apply_chat_template(
         self, messages, *, tokenize, add_generation_prompt, enable_thinking
     ) -> str:
-        body = "".join(f"<|im_start|>{m['role']}\n{m['content']}<|im_end|>\n" for m in messages)
+        body = "".join(
+            f"<|im_start|>{m['role']}\n{m['content']}<|im_end|>\n" for m in messages
+        )
         head = body + "<|im_start|>assistant\n"
         if enable_thinking or not self.enable_thinking_honoured:
             return head
@@ -41,18 +39,16 @@ def tokenizer() -> FakeTokenizer:
 
 @pytest.fixture
 def fake_generate_batch(monkeypatch):
-    """Replace ``qwen.generate_batch`` with a recorder that returns real Generations.
+    """Replace ``qwen.generate_batch`` with a recorder returning real Generations.
 
-    Returns the list of calls, so a test can assert what the provider actually asked
-    the GPU for. The continuation is derived from the prompt so rows are
-    distinguishable, and ``output`` is built the way the real function builds it —
-    ``prefill + continuation`` — because the prefill round-trip is what the scorer
-    later depends on.
+    Yields the list of calls, so a test can assert what was asked of the GPU.
     """
     calls: list[dict] = []
 
     def fake(model, tok, messages, *, seed, prefill="", max_new_tokens=512):
-        prefills = [prefill] * len(messages) if isinstance(prefill, str) else list(prefill)
+        prefills = (
+            [prefill] * len(messages) if isinstance(prefill, str) else list(prefill)
+        )
         calls.append(
             {
                 "messages": list(messages),
@@ -85,11 +81,7 @@ def fake_generate_batch(monkeypatch):
 
 @pytest.fixture
 def frozen_config_kwargs() -> dict:
-    """The generate-config values a task must set for the provider to accept them.
-
-    Derived from ``qwen.SAMPLING`` rather than restated, so this cannot drift from
-    the constant it is meant to mirror.
-    """
+    """Derived from ``qwen.SAMPLING`` rather than restated, so it cannot drift."""
     return {
         "temperature": SAMPLING["temperature"],
         "top_p": SAMPLING["top_p"],
