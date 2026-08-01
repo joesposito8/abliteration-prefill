@@ -43,7 +43,10 @@ from inspect_ai.model import (
 )
 from inspect_ai.tool import ToolChoice, ToolInfo
 
-from . import IN_FLIGHT
+# Twice the coming batch width: the connection limiter is held across the whole
+# provider call, so at 1x the running batch owns every permit and the next one
+# cannot assemble. Moves next to the batcher when that lands.
+IN_FLIGHT = 64
 
 # The five parameters `qwen.SAMPLING` freezes, in the shape a GenerateConfig
 # carries them: three have named fields, two have to ride in extra_body because

@@ -1,9 +1,9 @@
-"""Provider registration, kept apart from the provider itself.
+"""Provider registration, reached through the ``inspect_ai`` entry point in pyproject.
 
-The factory defers importing :mod:`harness.provider` until a model is actually
-created, which in turn defers ``generation.qwen`` and torch. Registering the class
-directly would pull torch into every process that merely imports this package —
-including the grading pass, which runs on a machine with no GPU.
+Returning a factory rather than the class defers ``generation.qwen`` and torch until
+a model is actually created. Registering the class directly would pull torch into
+every process that resolves any model name — including the grading pass, which runs
+on a machine with no GPU.
 """
 
 from __future__ import annotations

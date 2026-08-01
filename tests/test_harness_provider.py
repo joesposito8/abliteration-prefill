@@ -13,8 +13,7 @@ from __future__ import annotations
 import anyio
 import pytest
 from generation.qwen import SAMPLING
-from harness import IN_FLIGHT
-from harness.provider import QwenLocalAPI, split_prefill
+from harness.provider import IN_FLIGHT, QwenLocalAPI, split_prefill
 from inspect_ai.model import (
     ChatMessageAssistant,
     ChatMessageUser,
@@ -65,8 +64,13 @@ def test_a_broken_chat_template_fails_at_construction(tokenizer):
         build(tokenizer=tokenizer)
 
 
-def test_registered_provider_resolves_and_defers_torch():
-    """The registry hands back a factory, so importing the package is cheap."""
+def test_the_entry_point_registers_the_provider_and_defers_torch():
+    """Nothing here imports `harness._registry` — Inspect loads it via the entry point.
+
+    So this fails if the pyproject stanza is dropped, which would otherwise surface
+    as an unrecognised model name on the GPU box. Resolving must also not pull torch:
+    the factory hands back a class and imports nothing until a model is built.
+    """
     model = get_model(
         "qwen-local/base",
         max_new_tokens=512,
