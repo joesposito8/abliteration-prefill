@@ -74,8 +74,9 @@ class QwenLocalAPI(ModelAPI):
         module: Any = None,
         tokenizer: Any = None,
         max_new_tokens: int | None = None,
-        **kwargs: Any,
     ) -> None:
+        # No **kwargs: an unrecognised model_arg should be a TypeError here rather
+        # than a silently dropped one that resurfaces as "holds no live module".
         # super() captures initial_api_key before the key-override path runs.
         super().__init__(
             model_name=model_name, base_url=base_url, api_key=api_key, config=config
@@ -235,8 +236,10 @@ def require_frozen_sampling(config: GenerateConfig) -> dict[str, Any]:
     """Check the config's sampling parameters against the frozen set, and return them.
 
     Assert-match rather than reject-and-substitute. ``Task.config`` carries the whole
-    tuple so that every value is real provenance in ``eval.model_generate_config``;
-    this then confirms nothing rewrote it on the way through. The check belongs here,
+    tuple so that every value is real provenance in ``log.plan.config`` — the merged
+    config that actually ran, not ``EvalSpec.model_generate_config``, which holds
+    model-level settings only. This then confirms nothing rewrote it on the way
+    through. The check belongs here,
     at the point of use, because an ``eval()`` keyword argument beats ``Task.config``
     in the merge and would otherwise change the sampled distribution silently.
 

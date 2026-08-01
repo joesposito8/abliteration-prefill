@@ -51,6 +51,14 @@ def test_constructs_weightless_without_complaint():
     assert api.module is None and api.tokenizer is None
 
 
+def test_a_misspelled_model_arg_is_refused(tokenizer):
+    """Otherwise it is dropped and resurfaces later as a confusing missing-module error."""
+    from inspect_ai.model import get_model
+
+    with pytest.raises(TypeError, match="toknizer"):
+        get_model("qwen-local/typo-check", toknizer=tokenizer, max_new_tokens=512)
+
+
 def test_generate_refuses_when_weightless(frozen_config_kwargs):
     api = build()
     with pytest.raises(RuntimeError, match="holds no live module"):
