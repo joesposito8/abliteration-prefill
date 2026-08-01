@@ -41,14 +41,11 @@ def tokenizer() -> FakeTokenizer:
 def fake_generate_batch(monkeypatch):
     """Replace ``qwen.generate_batch`` with a recorder returning real Generations.
 
-    Yields the list of calls, so a test can assert what was asked of the GPU.
+    Returns the list of calls, so a test can assert what was asked of the GPU.
     """
     calls: list[dict] = []
 
     def fake(model, tok, messages, *, seed, prefill="", decoding=DECODING):
-        prefills = (
-            [prefill] * len(messages) if isinstance(prefill, str) else list(prefill)
-        )
         calls.append(
             {
                 "messages": list(messages),
@@ -58,13 +55,13 @@ def fake_generate_batch(monkeypatch):
             }
         )
         generations = []
-        for message, row_prefill in zip(messages, prefills, strict=True):
+        for message in messages:
             continuation = f" continuation for {message}"
             generations.append(
                 Generation(
                     message=message,
-                    prefill=row_prefill,
-                    output=row_prefill + continuation,
+                    prefill=prefill,
+                    output=prefill + continuation,
                     continuation=continuation,
                     raw_continuation=continuation + "<|im_end|>",
                     seed=seed,
