@@ -46,12 +46,13 @@ from generation import load_model, generate, generate_batch
 model, tokenizer = load_model()                            # BF16, pinned revision
 gen = generate(model, tokenizer, "...", seed=1)            # unprefilled
 gen = generate(model, tokenizer, "...", seed=1, prefill="Sure, here's how: ")
-gens, seconds = generate_batch(model, tokenizer, [...], seed=1)   # throughput only
+gens, seconds = generate_batch(model, tokenizer, [...], seed=1)   # one RNG stream
 ```
 
 `generate` produces one `Generation` from one seed, so replaying the seed reproduces
-that text. `generate_batch` is for throughput measurement: batched rows share a single
-RNG stream, so no individual row is reproducible from its seed alone.
+that text. `generate_batch` shares a single RNG stream across the batch, so a row is
+reproducible only by replaying the identical batch — composition has to be recorded,
+not assumed.
 
 A `Generation` carries `output` (prefill + continuation, the form `grade_stripped`
 expects), `continuation` (model tokens, special tokens stripped), and

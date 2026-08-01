@@ -21,7 +21,8 @@ length cap travels with them in ``DECODING``, since truncation changes the text 
 Seeding. ``generate`` produces exactly one generation from one seed, because a seed is
 only a reproducibility handle if replaying it reproduces that specific text. Batched
 sampling consumes a single RNG stream across the whole batch, so a per-row seed would
-be a lie; ``generate_batch`` exists for throughput work and says so.
+be a lie; ``generate_batch`` returns rows that are reproducible only by replaying
+the identical batch, and says so.
 
 Note for weight-editing callers: batched work here uses left padding, which is what
 makes index -1 the last real token. Anything collecting last-token hidden states must
@@ -204,8 +205,8 @@ def generate_batch(
 
     Returns ``(generations, batch_seconds)``. The seed applies to the batch as a
     whole: rows share one RNG stream, so an individual row is only reproducible by
-    replaying the identical batch. Use :func:`generate` when a generation must be
-    reproducible on its own — which is every case except throughput measurement.
+    replaying the identical batch. Use :func:`generate` when a row must be
+    reproducible from its seed alone.
     """
     import torch
 

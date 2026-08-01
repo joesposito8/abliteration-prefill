@@ -168,13 +168,12 @@ def split_prefill(input: list[ChatMessage]) -> tuple[str, str]:
     if isinstance(messages[-1], ChatMessageAssistant):
         prefill = messages.pop().text
 
-    user = [m for m in messages if m.role == "user"]
-    if len(user) != 1:
+    if len(messages) != 1 or messages[0].role != "user":
         raise ValueError(
-            f"expected exactly one user message, got {len(user)}; a multi-turn input "
-            "would silently drop context."
+            f"expected a single user message, got roles {[m.role for m in messages]}; "
+            "only the user turn is rendered, so anything else would be dropped."
         )
-    return user[0].text, prefill
+    return messages[0].text, prefill
 
 
 def require_frozen_decoding(config: GenerateConfig) -> dict[str, Any]:

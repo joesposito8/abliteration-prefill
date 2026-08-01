@@ -8,6 +8,7 @@ from generation.qwen import DECODING, Generation
 from harness.provider import IN_FLIGHT, QwenLocalAPI, split_prefill
 from inspect_ai.model import (
     ChatMessageAssistant,
+    ChatMessageSystem,
     ChatMessageUser,
     GenerateConfig,
     get_model,
@@ -178,9 +179,22 @@ def test_no_trailing_assistant_message_means_no_prefill():
     assert split_prefill([ChatMessageUser(content="q")]) == ("q", "")
 
 
-def test_multi_turn_input_is_refused_rather_than_silently_truncated():
-    with pytest.raises(ValueError, match="exactly one user message"):
-        split_prefill([ChatMessageUser(content="a"), ChatMessageUser(content="b")])
+@pytest.mark.parametrize(
+    "messages",
+    [
+        pytest.param(
+            [ChatMessageUser(content="a"), ChatMessageUser(content="b")], id="multi-turn"
+        ),
+        pytest.param(
+            [ChatMessageSystem(content="be helpful"), ChatMessageUser(content="q")],
+            id="system-message",
+        ),
+    ],
+)
+def test_anything_but_one_user_turn_is_refused(messages):
+    """Only the user turn is rendered, so the rest would vanish without a word."""
+    with pytest.raises(ValueError, match="single user message"):
+        split_prefill(messages)
 
 
 def test_completion_is_prefill_plus_continuation(
