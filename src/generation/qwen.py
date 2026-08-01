@@ -15,7 +15,8 @@ the model treats it as context to respond to rather than text to continue.
 Sampling. The model ships ``generation_config.json`` defaults of temperature 0.6 /
 top-p 0.95 (Qwen's thinking-mode recommendation). The study is preregistered on
 0.7 / 0.8 / top-k 20 / min-p 0, so the parameters are passed explicitly on every call;
-inheriting the model's defaults would silently change the sampled distribution.
+inheriting the model's defaults would silently change the sampled distribution. The
+length cap travels with them in ``DECODING``, since truncation changes the text too.
 
 Seeding. ``generate`` produces exactly one generation from one seed, because a seed is
 only a reproducibility handle if replaying it reproduces that specific text. Batched
@@ -36,15 +37,16 @@ from types import MappingProxyType
 MODEL_ID = "Qwen/Qwen3-4B"
 REVISION = "1cfa9a7208912126459214e8b04321603b3df60c"
 
-# Preregistered sampling parameters. Read-only: mutating these mid-run would silently
-# change the sampled distribution for every condition that follows.
-SAMPLING = MappingProxyType(
+# Every decoding parameter, as one object. Read-only: mutating these mid-run would
+# silently change the text produced for every condition that follows.
+DECODING = MappingProxyType(
     {
         "do_sample": True,
         "temperature": 0.7,
         "top_p": 0.8,
         "top_k": 20,
         "min_p": 0.0,
+        "max_new_tokens": 512,
     }
 )
 
@@ -153,7 +155,7 @@ def generate(
     *,
     seed: int,
     prefill: str = "",
-    max_new_tokens: int = 512,
+    decoding=DECODING,
 ) -> Generation:
     """Generate one continuation, reproducible from ``seed`` alone.
 
@@ -169,7 +171,7 @@ def generate(
     torch.manual_seed(seed)
     start = time.perf_counter()
     with torch.inference_mode():
-        output = model.generate(**encoded, max_new_tokens=max_new_tokens, **SAMPLING)
+        output = model.generate(**encoded, **decoding)
     seconds = time.perf_counter() - start
 
     continuation, raw, new_tokens = _decode(
@@ -184,7 +186,7 @@ def generate(
         seed=seed,
         prompt_tokens=prompt_tokens,
         new_tokens=new_tokens,
-        max_new_tokens=max_new_tokens,
+        max_new_tokens=decoding["max_new_tokens"],
         seconds=seconds,
     )
 
@@ -196,7 +198,7 @@ def generate_batch(
     *,
     seed: int,
     prefill: str = "",
-    max_new_tokens: int = 512,
+    decoding=DECODING,
 ) -> tuple[list[Generation], float]:
     """Generate one continuation per message in a single batched call.
 
@@ -218,7 +220,7 @@ def generate_batch(
     torch.manual_seed(seed)
     start = time.perf_counter()
     with torch.inference_mode():
-        outputs = model.generate(**encoded, max_new_tokens=max_new_tokens, **SAMPLING)
+        outputs = model.generate(**encoded, **decoding)
     batch_seconds = time.perf_counter() - start
 
     # Pull the generated tokens and prompt lengths to the host once, rather than
@@ -240,7 +242,7 @@ def generate_batch(
                 # The row's own length, not the padded batch width.
                 prompt_tokens=prompt_lengths[index],
                 new_tokens=new_tokens,
-                max_new_tokens=max_new_tokens,
+                max_new_tokens=decoding["max_new_tokens"],
             )
         )
     return generations, batch_seconds

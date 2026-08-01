@@ -36,11 +36,6 @@ from inspect_ai.tool import ToolChoice, ToolInfo
 
 IN_FLIGHT = 64
 
-# min_p and do_sample have no GenerateConfig field, and unknown fields are rejected,
-# so they travel in extra_body while the other three are named.
-_NAMED = ("temperature", "top_p", "top_k")
-_EXTRA = ("do_sample", "min_p")
-
 
 class QwenLocalAPI(ModelAPI):
     """Generates from a module handed in as a model argument.
@@ -59,7 +54,6 @@ class QwenLocalAPI(ModelAPI):
         *,
         module: Any = None,
         tokenizer: Any = None,
-        max_new_tokens: int | None = None,
     ) -> None:
         # No **kwargs, so a misspelled model_arg is a TypeError here rather than a
         # missing-module error much later.
@@ -68,7 +62,6 @@ class QwenLocalAPI(ModelAPI):
         )
         self.module = module
         self.tokenizer = tokenizer
-        self.max_new_tokens = max_new_tokens
 
         if tokenizer is not None:
             # Fail on a broken chat template now rather than after hours of generation.
@@ -92,8 +85,7 @@ class QwenLocalAPI(ModelAPI):
         config: GenerateConfig,
     ) -> tuple[ModelOutput | Exception, ModelCall]:
         message, prefill = split_prefill(input)
-        sampling = require_frozen_sampling(config)
-        max_new_tokens = self.require_max_new_tokens(config)
+        decoding = require_frozen_decoding(config)
         seed = require_seed(config)
 
         if self.module is None or self.tokenizer is None:
@@ -116,7 +108,6 @@ class QwenLocalAPI(ModelAPI):
                 [message],
                 seed=seed,
                 prefill=prefill,
-                max_new_tokens=max_new_tokens,
             )
         )
         generation = generations[0]
@@ -128,7 +119,9 @@ class QwenLocalAPI(ModelAPI):
             # make every scorer reassemble the string again.
             content=generation.output,
             stop_reason=(
-                "max_tokens" if generation.new_tokens >= max_new_tokens else "stop"
+                "max_tokens"
+                if generation.new_tokens >= generation.max_new_tokens
+                else "stop"
             ),
         )
         output.usage = ModelUsage(
@@ -151,8 +144,7 @@ class QwenLocalAPI(ModelAPI):
                 "prompt": prompt,
                 "prefill": prefill,
                 "seed": seed,
-                "max_new_tokens": max_new_tokens,
-                **sampling,
+                **decoding,
             },
             response={
                 "continuation": generation.continuation,
@@ -160,23 +152,6 @@ class QwenLocalAPI(ModelAPI):
                 "batch_seconds": seconds,
             },
         )
-
-    def require_max_new_tokens(self, config: GenerateConfig) -> int:
-        """The generation length, which the config and this provider must agree on.
-
-        Not part of ``qwen.SAMPLING``, so it is pinned by being passed in and checked.
-        """
-        if self.max_new_tokens is None:
-            raise ValueError(
-                f"{type(self).__name__} was constructed without max_new_tokens; pass "
-                "it as a model_arg so the generation length is pinned."
-            )
-        if config.max_tokens != self.max_new_tokens:
-            raise ValueError(
-                f"max_tokens disagreement: config asks for {config.max_tokens}, this "
-                f"provider was built for {self.max_new_tokens}."
-            )
-        return self.max_new_tokens
 
 
 def split_prefill(input: list[ChatMessage]) -> tuple[str, str]:
@@ -202,22 +177,31 @@ def split_prefill(input: list[ChatMessage]) -> tuple[str, str]:
     return user[0].text, prefill
 
 
-def require_frozen_sampling(config: GenerateConfig) -> dict[str, Any]:
-    """Check the config's sampling parameters against the frozen set, and return them.
+def require_frozen_decoding(config: GenerateConfig) -> dict[str, Any]:
+    """Check the config's decoding parameters against the frozen set, and return them.
 
     Checked here rather than trusted from the task, because an ``eval()`` keyword
-    argument wins the config merge and would otherwise change the sampled
-    distribution silently. Compared against ``qwen.SAMPLING`` because that is the
-    object ``generate_batch`` passes to ``model.generate``, so agreement here means
-    agreement at the forward pass.
+    argument wins the config merge and would otherwise change the text silently.
+    Compared against ``qwen.DECODING`` because that is the object ``generate_batch``
+    passes to ``model.generate``, so agreement here means agreement at the forward
+    pass.
     """
-    from generation.qwen import SAMPLING
+    from generation.qwen import DECODING
 
     extra = config.extra_body or {}
-    declared = {name: getattr(config, name) for name in _NAMED}
-    declared.update({name: extra.get(name) for name in _EXTRA})
+    declared = {
+        "temperature": config.temperature,
+        "top_p": config.top_p,
+        "top_k": config.top_k,
+        # GenerateConfig names the length cap differently from transformers.
+        "max_new_tokens": config.max_tokens,
+        # No GenerateConfig field exists for these two, and unknown fields are
+        # rejected, so a task has to pass them in extra_body.
+        "do_sample": extra.get("do_sample"),
+        "min_p": extra.get("min_p"),
+    }
 
-    frozen = dict(SAMPLING)
+    frozen = dict(DECODING)
     if declared != frozen:
         differing = {
             name: (declared.get(name), frozen.get(name))
@@ -225,7 +209,7 @@ def require_frozen_sampling(config: GenerateConfig) -> dict[str, Any]:
             if declared.get(name) != frozen.get(name)
         }
         raise ValueError(
-            "generate config does not match the frozen sampling parameters "
+            "generate config does not match the frozen decoding parameters "
             f"(name: got, expected): {differing}. min_p and do_sample have no "
             "GenerateConfig field and must be passed in extra_body."
         )

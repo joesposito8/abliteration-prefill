@@ -3,7 +3,7 @@
 from .qwen import (
     MODEL_ID,
     REVISION,
-    SAMPLING,
+    DECODING,
     THINKING_SENTINEL,
     Generation,
     build_prompt,
@@ -16,7 +16,7 @@ from .qwen import (
 __all__ = [
     "MODEL_ID",
     "REVISION",
-    "SAMPLING",
+    "DECODING",
     "THINKING_SENTINEL",
     "Generation",
     "build_prompt",

@@ -56,8 +56,9 @@ RNG stream, so no individual row is reproducible from its seed alone.
 A `Generation` carries `output` (prefill + continuation, the form `grade_stripped`
 expects), `continuation` (model tokens, special tokens stripped), and
 `raw_continuation` (control tokens intact, for leak checks), plus seed and token
-counts. Sampling is fixed at temperature 0.7 / top-p 0.8 / top-k 20 / min-p 0 — the
-model's own config defaults to the thinking-mode values 0.6 / 0.95, which would
+counts. Decoding is fixed in one frozen `DECODING` mapping — temperature 0.7 / top-p
+0.8 / top-k 20 / min-p 0, capped at 512 new tokens — passed explicitly on every call.
+The model's own config defaults to the thinking-mode values 0.6 / 0.95, which would
 otherwise be inherited silently.
 
 ### Environment

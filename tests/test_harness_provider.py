@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import anyio
 import pytest
-from generation.qwen import SAMPLING, Generation
+from generation.qwen import DECODING, Generation
 from harness.provider import IN_FLIGHT, QwenLocalAPI, split_prefill
 from inspect_ai.model import (
     ChatMessageAssistant,
@@ -16,17 +16,14 @@ from inspect_ai.model import (
 SEED = 20260724
 
 
-def build(tokenizer=None, module=None, max_new_tokens=512) -> QwenLocalAPI:
+def build(tokenizer=None, module=None) -> QwenLocalAPI:
     return QwenLocalAPI(
-        model_name="qwen-local/layer_22",
-        module=module,
-        tokenizer=tokenizer,
-        max_new_tokens=max_new_tokens,
+        model_name="qwen-local/layer_22", module=module, tokenizer=tokenizer
     )
 
 
 def config(frozen_config_kwargs, **overrides) -> GenerateConfig:
-    kwargs = {"seed": SEED, "max_tokens": 512, **frozen_config_kwargs, **overrides}
+    kwargs = {"seed": SEED, **frozen_config_kwargs, **overrides}
     return GenerateConfig(**kwargs)
 
 
@@ -43,14 +40,12 @@ def run_eval(tmp_path, tokenizer, frozen_config_kwargs, **eval_kwargs):
     task = Task(
         dataset=MemoryDataset([Sample(id="000/none", input="q", target="")]),
         solver=generate_solver(),
-        config=GenerateConfig(
-            **{"seed": SEED, "max_tokens": 512, **frozen_config_kwargs}
-        ),
+        config=GenerateConfig(seed=SEED, **frozen_config_kwargs),
     )
     return eval(
         task,
         model="qwen-local/base",
-        model_args={"module": object(), "tokenizer": tokenizer, "max_new_tokens": 512},
+        model_args={"module": object(), "tokenizer": tokenizer},
         log_dir=str(tmp_path),
         score=False,
         **eval_kwargs,
@@ -69,7 +64,7 @@ def test_constructs_weightless_without_complaint():
 def test_a_misspelled_model_arg_is_refused(tokenizer):
     """Otherwise it is dropped and resurfaces as a missing-module error much later."""
     with pytest.raises(TypeError, match="toknizer"):
-        get_model("qwen-local/typo-check", toknizer=tokenizer, max_new_tokens=512)
+        get_model("qwen-local/typo-check", toknizer=tokenizer)
 
 
 def test_generate_refuses_when_weightless(frozen_config_kwargs):
@@ -88,16 +83,12 @@ def test_a_broken_chat_template_fails_at_construction(tokenizer):
 
 def test_the_entry_point_registers_the_provider_and_defers_torch():
     """Nothing here imports `harness._registry`; Inspect loads it via the entry point."""
-    model = get_model(
-        "qwen-local/base",
-        max_new_tokens=512,
-        config=GenerateConfig(max_connections=IN_FLIGHT),
-    )
+    model = get_model("qwen-local/base", config=GenerateConfig(max_connections=IN_FLIGHT))
     assert isinstance(model.api, QwenLocalAPI)
     assert model.api.max_connections() == IN_FLIGHT
 
 
-# --- the frozen sampling parameters ----------------------------------------
+# --- the frozen decoding parameters ----------------------------------------
 
 
 def test_accepts_a_config_that_matches_the_frozen_set(
@@ -120,13 +111,14 @@ def test_accepts_a_config_that_matches_the_frozen_set(
         ),
         pytest.param({"extra_body": {"do_sample": True}}, id="extra-body-missing-min_p"),
         pytest.param({"extra_body": None}, id="extra-body-absent"),
+        pytest.param({"max_tokens": 256}, id="length-cap-override"),
     ],
 )
 def test_rejects_any_drift_from_the_frozen_set(
     tokenizer, fake_generate_batch, frozen_config_kwargs, overrides
 ):
     api = build(tokenizer=tokenizer, module=object())
-    with pytest.raises(ValueError, match="frozen sampling parameters"):
+    with pytest.raises(ValueError, match="frozen decoding parameters"):
         anyio.run(
             generate,
             api,
@@ -135,36 +127,13 @@ def test_rejects_any_drift_from_the_frozen_set(
         )
 
 
-def test_the_comparison_is_against_qwen_sampling_itself(
+def test_the_comparison_is_against_qwen_decoding_itself(
     tokenizer, fake_generate_batch, frozen_config_kwargs, monkeypatch
 ):
     """Were they separate constants, the check could pass while the GPU ran otherwise."""
-    monkeypatch.setattr("generation.qwen.SAMPLING", {**SAMPLING, "temperature": 0.123})
+    monkeypatch.setattr("generation.qwen.DECODING", {**DECODING, "temperature": 0.123})
     api = build(tokenizer=tokenizer, module=object())
-    with pytest.raises(ValueError, match="frozen sampling parameters"):
-        anyio.run(
-            generate, api, [ChatMessageUser(content="q")], config(frozen_config_kwargs)
-        )
-
-
-def test_max_tokens_must_agree_with_the_provider(
-    tokenizer, fake_generate_batch, frozen_config_kwargs
-):
-    api = build(tokenizer=tokenizer, module=object(), max_new_tokens=512)
-    with pytest.raises(ValueError, match="max_tokens disagreement"):
-        anyio.run(
-            generate,
-            api,
-            [ChatMessageUser(content="q")],
-            config(frozen_config_kwargs, max_tokens=256),
-        )
-
-
-def test_missing_max_new_tokens_is_a_construction_argument_error(
-    tokenizer, fake_generate_batch, frozen_config_kwargs
-):
-    api = build(tokenizer=tokenizer, module=object(), max_new_tokens=None)
-    with pytest.raises(ValueError, match="without max_new_tokens"):
+    with pytest.raises(ValueError, match="frozen decoding parameters"):
         anyio.run(
             generate, api, [ChatMessageUser(content="q")], config(frozen_config_kwargs)
         )
@@ -251,7 +220,7 @@ def test_metadata_carries_raw_continuation_and_the_pad_cut_token_count(
 def test_a_thinking_leak_is_flagged(tokenizer, frozen_config_kwargs, monkeypatch):
     """`<think>` survives skip_special_tokens, so a leak is detectable but not visible."""
 
-    def leaky(model, tok, messages, *, seed, prefill="", max_new_tokens=512):
+    def leaky(model, tok, messages, *, seed, prefill="", decoding=DECODING):
         text = "<think>hmm</think> ok"
         return [
             Generation(
@@ -263,7 +232,7 @@ def test_a_thinking_leak_is_flagged(tokenizer, frozen_config_kwargs, monkeypatch
                 seed=seed,
                 prompt_tokens=3,
                 new_tokens=5,
-                max_new_tokens=max_new_tokens,
+                max_new_tokens=decoding["max_new_tokens"],
             )
         ], 0.1
 
@@ -278,7 +247,7 @@ def test_a_thinking_leak_is_flagged(tokenizer, frozen_config_kwargs, monkeypatch
 def test_truncation_shows_up_as_a_stop_reason(
     tokenizer, frozen_config_kwargs, monkeypatch
 ):
-    def truncated(model, tok, messages, *, seed, prefill="", max_new_tokens=512):
+    def truncated(model, tok, messages, *, seed, prefill="", decoding=DECODING):
         return [
             Generation(
                 message=messages[0],
@@ -288,8 +257,8 @@ def test_truncation_shows_up_as_a_stop_reason(
                 raw_continuation="cut off",
                 seed=seed,
                 prompt_tokens=3,
-                new_tokens=max_new_tokens,
-                max_new_tokens=max_new_tokens,
+                new_tokens=decoding["max_new_tokens"],
+                max_new_tokens=decoding["max_new_tokens"],
             )
         ], 0.1
 
@@ -310,7 +279,6 @@ def test_the_log_records_a_null_module(
     assert log.status == "success"
     assert log.eval.model_args["module"] is None
     assert log.eval.model_args["tokenizer"] is None
-    assert log.eval.model_args["max_new_tokens"] == 512
 
 
 def test_decoding_provenance_lands_in_the_plan_config(
@@ -324,13 +292,13 @@ def test_decoding_provenance_lands_in_the_plan_config(
     log = run_eval(tmp_path, tokenizer, frozen_config_kwargs)
 
     assert log.plan.config.seed == SEED
-    assert log.plan.config.temperature == SAMPLING["temperature"]
-    assert log.plan.config.top_p == SAMPLING["top_p"]
-    assert log.plan.config.top_k == SAMPLING["top_k"]
-    assert log.plan.config.max_tokens == 512
+    assert log.plan.config.temperature == DECODING["temperature"]
+    assert log.plan.config.top_p == DECODING["top_p"]
+    assert log.plan.config.top_k == DECODING["top_k"]
+    assert log.plan.config.max_tokens == DECODING["max_new_tokens"]
     assert log.plan.config.extra_body == {
-        "min_p": SAMPLING["min_p"],
-        "do_sample": SAMPLING["do_sample"],
+        "min_p": DECODING["min_p"],
+        "do_sample": DECODING["do_sample"],
     }
     assert log.eval.model_generate_config.seed is None
 
@@ -342,7 +310,7 @@ def test_an_eval_kwarg_beats_the_task_config_and_the_provider_catches_it(
     log = run_eval(tmp_path, tokenizer, frozen_config_kwargs, temperature=0.9)
 
     assert log.status == "error"
-    assert "frozen sampling parameters" in str(log.error.message)
+    assert "frozen decoding parameters" in str(log.error.message)
     assert log.plan.config.temperature == 0.9
 
 
@@ -361,4 +329,4 @@ def test_model_call_records_the_rendered_prompt(
     )
     assert call.request["prompt"].endswith(THINKING_SENTINEL + "Sure:")
     assert call.request["seed"] == SEED
-    assert call.request["temperature"] == SAMPLING["temperature"]
+    assert call.request["temperature"] == DECODING["temperature"]

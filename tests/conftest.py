@@ -7,7 +7,7 @@ forward pass — so a failure means the harness is wrong rather than a fake is.
 from __future__ import annotations
 
 import pytest
-from generation.qwen import SAMPLING, THINKING_SENTINEL, Generation
+from generation.qwen import DECODING, THINKING_SENTINEL, Generation
 
 
 class FakeTokenizer:
@@ -45,7 +45,7 @@ def fake_generate_batch(monkeypatch):
     """
     calls: list[dict] = []
 
-    def fake(model, tok, messages, *, seed, prefill="", max_new_tokens=512):
+    def fake(model, tok, messages, *, seed, prefill="", decoding=DECODING):
         prefills = (
             [prefill] * len(messages) if isinstance(prefill, str) else list(prefill)
         )
@@ -54,7 +54,7 @@ def fake_generate_batch(monkeypatch):
                 "messages": list(messages),
                 "seed": seed,
                 "prefill": prefill,
-                "max_new_tokens": max_new_tokens,
+                "decoding": dict(decoding),
             }
         )
         generations = []
@@ -70,7 +70,7 @@ def fake_generate_batch(monkeypatch):
                     seed=seed,
                     prompt_tokens=11,
                     new_tokens=7,
-                    max_new_tokens=max_new_tokens,
+                    max_new_tokens=decoding["max_new_tokens"],
                 )
             )
         return generations, 0.5
@@ -81,10 +81,11 @@ def fake_generate_batch(monkeypatch):
 
 @pytest.fixture
 def frozen_config_kwargs() -> dict:
-    """Derived from ``qwen.SAMPLING`` rather than restated, so it cannot drift."""
+    """Derived from ``qwen.DECODING`` rather than restated, so it cannot drift."""
     return {
-        "temperature": SAMPLING["temperature"],
-        "top_p": SAMPLING["top_p"],
-        "top_k": SAMPLING["top_k"],
-        "extra_body": {"min_p": SAMPLING["min_p"], "do_sample": SAMPLING["do_sample"]},
+        "temperature": DECODING["temperature"],
+        "top_p": DECODING["top_p"],
+        "top_k": DECODING["top_k"],
+        "max_tokens": DECODING["max_new_tokens"],
+        "extra_body": {"min_p": DECODING["min_p"], "do_sample": DECODING["do_sample"]},
     }

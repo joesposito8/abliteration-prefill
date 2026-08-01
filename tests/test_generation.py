@@ -11,7 +11,7 @@ import pytest
 
 from generation import qwen
 from generation.qwen import (
-    SAMPLING,
+    DECODING,
     THINKING_SENTINEL,
     build_prompt,
     contains_thinking,
@@ -75,14 +75,15 @@ def test_build_prompt_rejects_a_template_without_the_sentinel():
         build_prompt(_NoSentinelTokenizer(), MESSAGE)
 
 
-def test_sampling_parameters_are_the_preregistered_ones():
+def test_decoding_parameters_are_the_preregistered_ones():
     """The model's own config defaults to 0.6/0.95; those must never be inherited."""
-    assert SAMPLING == {
+    assert DECODING == {
         "do_sample": True,
         "temperature": 0.7,
         "top_p": 0.8,
         "top_k": 20,
         "min_p": 0.0,
+        "max_new_tokens": 512,
     }
 
 
