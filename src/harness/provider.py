@@ -7,8 +7,11 @@ be answered rather than continued.
 
 The module and tokenizer arrive as ``model_args``. They reach this constructor as
 live objects but serialise to ``null`` in the log, which is what keeps edited
-weights out of log files — **do not add a serializer for them.** The cost is that
-anything rebuilt from a log arrives weightless, so construction must tolerate it and
+weights out of log files — **do not add a serializer for them.**
+
+Construction must therefore succeed without them, and not only for scoring passes
+rebuilt from a log: Inspect also builds a second, weightless instance during an
+ordinary run to resolve model info. Refusing here would break generation too, so
 only :meth:`generate` refuses.
 
 Inspect memoises providers on the model name plus the *serialised* ``model_args``,

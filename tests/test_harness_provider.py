@@ -61,7 +61,11 @@ def run_eval(tmp_path, tokenizer, frozen_config_kwargs, **eval_kwargs):
 
 
 def test_constructs_weightless_without_complaint():
-    """A scoring pass rebuilds from the log, where model_args are null."""
+    """Two paths build one: model-info resolution during a run, and scoring from a log.
+
+    Neither passes model_args, so refusing here would break generation as well as
+    grading.
+    """
     api = build()
     assert api.module is None and api.tokenizer is None
 
