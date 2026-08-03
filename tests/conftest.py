@@ -7,7 +7,9 @@ forward pass — so a failure means the harness is wrong rather than a fake is.
 from __future__ import annotations
 
 import pytest
-from generation.qwen import DECODING, THINKING_SENTINEL, Generation, row_prefills
+from generation.qwen import DECODING, THINKING_SENTINEL, Continuation
+
+CONTINUATION = " a continuation"
 
 
 class FakeTokenizer:
@@ -38,44 +40,27 @@ def tokenizer() -> FakeTokenizer:
 
 
 @pytest.fixture
-def fake_generate_batch(monkeypatch):
-    """Replace ``qwen.generate_batch`` with a recorder returning real Generations.
+def fake_generate_prompts(monkeypatch):
+    """Replace the forward pass with a recorder returning real Continuations.
 
     Returns the list of calls, so a test can assert what was asked of the GPU.
     """
     calls: list[dict] = []
 
-    def fake(model, tok, messages, *, seed, prefill="", decoding=DECODING):
-        # The real broadcast-and-length-check, so the double cannot be more
-        # permissive than the function it replaces.
-        prefills = row_prefills(prefill, len(messages))
-        calls.append(
-            {
-                "messages": list(messages),
-                "seed": seed,
-                "prefill": prefill,
-                "decoding": dict(decoding),
-            }
-        )
-        generations = []
-        for message, row_prefill in zip(messages, prefills):
-            continuation = f" continuation for {message}"
-            generations.append(
-                Generation(
-                    message=message,
-                    prefill=row_prefill,
-                    output=row_prefill + continuation,
-                    continuation=continuation,
-                    raw_continuation=continuation + "<|im_end|>",
-                    seed=seed,
-                    prompt_tokens=11,
-                    new_tokens=7,
-                    max_new_tokens=decoding["max_new_tokens"],
-                )
+    def fake(model, tok, prompts, *, seed, decoding=DECODING):
+        calls.append({"prompts": list(prompts), "seed": seed})
+        return [
+            Continuation(
+                continuation=CONTINUATION,
+                raw_continuation=CONTINUATION + "<|im_end|>",
+                prompt_tokens=11,
+                new_tokens=7,
             )
-        return generations, 0.5
+            for _ in prompts
+        ], 0.5
 
-    monkeypatch.setattr("generation.qwen.generate_batch", fake)
+    monkeypatch.setattr("generation.qwen.generate_prompts", fake)
+    monkeypatch.setattr("harness.batching.generate_prompts", fake)
     return calls
 
 

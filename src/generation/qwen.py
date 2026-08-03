@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import MappingProxyType
 
 MODEL_ID = "Qwen/Qwen3-4B"
@@ -75,6 +75,16 @@ class Generation:
     def tokens_per_second(self) -> float | None:
         """Single generations only; batch rows have no individual duration."""
         return self.new_tokens / self.seconds if self.seconds else None
+
+
+@dataclass
+class Continuation:
+    """One prompt's generated text and the token counts that characterise it."""
+
+    continuation: str  # special tokens stripped
+    raw_continuation: str  # control tokens left in, for leak checks
+    prompt_tokens: int  # the row's own length, not the padded batch width
+    new_tokens: int  # cut at the pad token
 
 
 def contains_thinking(text: str) -> bool:
@@ -182,33 +192,10 @@ def generate(
     ``seed`` is keyword-only with no default: every replicate records the seed that
     produced it, so it cannot be omitted.
     """
-    import torch
-
-    prompt = build_prompt(tokenizer, message, prefill)
-    encoded = tokenizer(prompt, return_tensors="pt").to(model.device)
-    prompt_tokens = encoded.input_ids.shape[1]
-
-    torch.manual_seed(seed)
-    start = time.perf_counter()
-    with torch.inference_mode():
-        output = model.generate(**encoded, **decoding)
-    seconds = time.perf_counter() - start
-
-    continuation, raw, new_tokens = _decode(
-        tokenizer, output[0][prompt_tokens:].tolist(), _pad_token_id(model, tokenizer)
+    generations, seconds = generate_batch(
+        model, tokenizer, [message], seed=seed, prefill=prefill, decoding=decoding
     )
-    return Generation(
-        message=message,
-        prefill=prefill,
-        output=prefill + continuation,
-        continuation=continuation,
-        raw_continuation=raw,
-        seed=seed,
-        prompt_tokens=prompt_tokens,
-        new_tokens=new_tokens,
-        max_new_tokens=decoding["max_new_tokens"],
-        seconds=seconds,
-    )
+    return replace(generations[0], seconds=seconds)
 
 
 def generate_batch(
@@ -231,13 +218,45 @@ def generate_batch(
     replaying the identical batch. Use :func:`generate` when a row must be
     reproducible from its seed alone.
     """
-    import torch
-
     prefills = row_prefills(prefill, len(messages))
     prompts = [
         build_prompt(tokenizer, message, row_prefill)
         for message, row_prefill in zip(messages, prefills)
     ]
+    continuations, batch_seconds = generate_prompts(
+        model, tokenizer, prompts, seed=seed, decoding=decoding
+    )
+    return [
+        Generation(
+            message=message,
+            prefill=row_prefill,
+            output=row_prefill + row.continuation,
+            continuation=row.continuation,
+            raw_continuation=row.raw_continuation,
+            seed=seed,
+            prompt_tokens=row.prompt_tokens,
+            new_tokens=row.new_tokens,
+            max_new_tokens=decoding["max_new_tokens"],
+        )
+        for message, row_prefill, row in zip(messages, prefills, continuations)
+    ], batch_seconds
+
+
+def generate_prompts(
+    model,
+    tokenizer,
+    prompts: list[str],
+    *,
+    seed: int,
+    decoding=DECODING,
+) -> tuple[list[Continuation], float]:
+    """Run already-rendered prompts through the model in one batched call.
+
+    The only path to the GPU. Knows nothing of prefills: whatever distinguishes the
+    rows is already in the prompt strings.
+    """
+    import torch
+
     # Left padding keeps the prompt the same length for every row, so generated
     # tokens start at a single known offset.
     encoded = tokenizer(
@@ -256,23 +275,15 @@ def generate_batch(
     pad_token_id = _pad_token_id(model, tokenizer)
     rows = outputs[:, padded_width:].tolist()
     prompt_lengths = encoded.attention_mask.sum(dim=1).tolist()
-    generations = []
-    for index, (row, message, row_prefill) in enumerate(
-        zip(rows, messages, prefills)
-    ):
-        continuation, raw, new_tokens = _decode(tokenizer, row, pad_token_id)
-        generations.append(
-            Generation(
-                message=message,
-                prefill=row_prefill,
-                output=row_prefill + continuation,
-                continuation=continuation,
+    continuations = []
+    for index, row in enumerate(rows):
+        text, raw, new_tokens = _decode(tokenizer, row, pad_token_id)
+        continuations.append(
+            Continuation(
+                continuation=text,
                 raw_continuation=raw,
-                seed=seed,
-                # The row's own length, not the padded batch width.
                 prompt_tokens=prompt_lengths[index],
                 new_tokens=new_tokens,
-                max_new_tokens=decoding["max_new_tokens"],
             )
         )
-    return generations, batch_seconds
+    return continuations, batch_seconds

@@ -33,6 +33,8 @@ from inspect_ai.model import (
 )
 from inspect_ai.tool import ToolChoice, ToolInfo
 
+from generation.qwen import build_prompt, contains_thinking
+
 from .batching import IN_FLIGHT, BatchGenerator
 
 
@@ -65,8 +67,6 @@ class QwenLocalAPI(ModelAPI):
 
         if tokenizer is not None:
             # Fail on a broken chat template now rather than after hours of generation.
-            from generation.qwen import build_prompt
-
             build_prompt(tokenizer, "startup check")
 
     def max_connections(self) -> int:
@@ -95,36 +95,33 @@ class QwenLocalAPI(ModelAPI):
                 "weightless; pass module= and tokenizer= to the eval that generates."
             )
 
-        from generation.qwen import build_prompt, contains_thinking
-
         prompt = build_prompt(self.tokenizer, message, prefill)
-        row = await self._batcher.submit(message, prefill, seed)
-        generation = row.generation
+        row = await self._batcher.submit(prompt, seed)
 
         output = ModelOutput.from_content(
             model=self.model_name,
             # The whole assistant turn. Inspect appends the generated message after a
             # prefill rather than merging, so returning the continuation alone would
             # make every scorer reassemble the string again.
-            content=generation.output,
+            content=prefill + row.continuation,
             stop_reason=(
                 "max_tokens"
-                if generation.new_tokens >= generation.max_new_tokens
+                if row.new_tokens >= decoding["max_new_tokens"]
                 else "stop"
             ),
         )
         output.usage = ModelUsage(
-            input_tokens=generation.prompt_tokens,
-            output_tokens=generation.new_tokens,
-            total_tokens=generation.prompt_tokens + generation.new_tokens,
+            input_tokens=row.prompt_tokens,
+            output_tokens=row.new_tokens,
+            total_tokens=row.prompt_tokens + row.new_tokens,
         )
         output.metadata = {
             # Control tokens intact, unlike completion — the leak check needs them.
-            "raw_continuation": generation.raw_continuation,
+            "raw_continuation": row.raw_continuation,
             # Cut at the pad token, so this row's own count and not the batch width.
-            "new_tokens": generation.new_tokens,
-            "prompt_tokens": generation.prompt_tokens,
-            "thinking_leak": contains_thinking(generation.raw_continuation),
+            "new_tokens": row.new_tokens,
+            "prompt_tokens": row.prompt_tokens,
+            "thinking_leak": contains_thinking(row.raw_continuation),
             "prefill": prefill,
             "seed": seed,
             # Composition is arrival-dependent, so it is recorded, not replayable.
@@ -139,8 +136,8 @@ class QwenLocalAPI(ModelAPI):
                 **decoding,
             },
             response={
-                "continuation": generation.continuation,
-                "new_tokens": generation.new_tokens,
+                "continuation": row.continuation,
+                "new_tokens": row.new_tokens,
                 "batch_seconds": row.seconds,
             },
         )
@@ -173,7 +170,7 @@ def require_frozen_decoding(config: GenerateConfig) -> dict[str, Any]:
 
     Checked here rather than trusted from the task, because an ``eval()`` keyword
     argument wins the config merge and would otherwise change the text silently.
-    Compared against ``qwen.DECODING`` because that is the object ``generate_batch``
+    Compared against ``qwen.DECODING`` because that is the object ``generate_prompts``
     passes to ``model.generate``, so agreement here means agreement at the forward
     pass.
     """

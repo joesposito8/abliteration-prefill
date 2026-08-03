@@ -7,7 +7,10 @@ throughput needs real weights, and is asserted by the on-GPU smoke harness inste
 
 import inspect
 
+import dataclasses
+
 import pytest
+from conftest import FakeTokenizer
 
 from generation import qwen
 from generation.qwen import (
@@ -131,3 +134,51 @@ def test_a_mismatched_prefill_count_raises_rather_than_truncating(prefills):
     strings that do not match the text generated."""
     with pytest.raises(ValueError, match="prefills for 3 messages"):
         qwen.row_prefills(prefills, 3)
+
+
+# --- rendering layered over the forward pass -------------------------------
+
+
+def fake_prompts(monkeypatch, seconds=0.5):
+    """Stand in for the forward pass, returning one Continuation per prompt."""
+    calls = []
+
+    def fake(model, tok, prompts, *, seed, decoding=qwen.DECODING):
+        calls.append(list(prompts))
+        return [
+            qwen.Continuation(
+                continuation=f"<{i}>",
+                raw_continuation=f"<{i}>",
+                prompt_tokens=3,
+                new_tokens=4,
+            )
+            for i, _ in enumerate(prompts)
+        ], seconds
+
+    monkeypatch.setattr(qwen, "generate_prompts", fake)
+    return calls
+
+
+def test_generate_batch_folds_each_prefill_into_its_own_prompt(monkeypatch):
+    calls = fake_prompts(monkeypatch)
+
+    generations, _ = qwen.generate_batch(
+        None, FakeTokenizer(), ["m0", "m1"], seed=1, prefill=["A:", "B:"]
+    )
+
+    assert [p.endswith(("A:", "B:")) for p in calls[0]] == [True, True]
+    assert [g.prefill for g in generations] == ["A:", "B:"]
+    assert [g.output for g in generations] == ["A:<0>", "B:<1>"]
+
+
+def test_generate_is_a_single_row_batch(monkeypatch):
+    """One path reaches the GPU, so the two cannot drift apart."""
+    fake_prompts(monkeypatch, seconds=1.25)
+    tokenizer = FakeTokenizer()
+
+    one = qwen.generate(None, tokenizer, "m", seed=1, prefill="A:")
+    batched, _ = qwen.generate_batch(None, tokenizer, ["m"], seed=1, prefill="A:")
+
+    # A single generation carries its own duration; a batch row shares one clock.
+    assert one.seconds == 1.25
+    assert dataclasses.replace(one, seconds=None) == batched[0]

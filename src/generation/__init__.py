@@ -5,12 +5,14 @@ from .qwen import (
     REVISION,
     DECODING,
     THINKING_SENTINEL,
+    Continuation,
     Generation,
     row_prefills,
     build_prompt,
     contains_thinking,
     generate,
     generate_batch,
+    generate_prompts,
     load_model,
 )
 
@@ -19,11 +21,13 @@ __all__ = [
     "REVISION",
     "DECODING",
     "THINKING_SENTINEL",
+    "Continuation",
     "Generation",
     "row_prefills",
     "build_prompt",
     "contains_thinking",
     "generate",
     "generate_batch",
+    "generate_prompts",
     "load_model",
 ]

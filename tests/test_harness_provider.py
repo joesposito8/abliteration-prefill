@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import anyio
 import pytest
-from generation.qwen import DECODING, Generation
+from conftest import CONTINUATION
+from generation.qwen import DECODING, Continuation
 from harness.provider import IN_FLIGHT, QwenLocalAPI, split_prefill
 from inspect_ai.model import (
     ChatMessageAssistant,
@@ -93,7 +94,7 @@ def test_the_entry_point_registers_the_provider_and_defers_torch():
 
 
 def test_accepts_a_config_that_matches_the_frozen_set(
-    tokenizer, fake_generate_batch, frozen_config_kwargs
+    tokenizer, fake_generate_prompts, frozen_config_kwargs
 ):
     api = build(tokenizer=tokenizer, module=object())
     output, _ = anyio.run(
@@ -116,7 +117,7 @@ def test_accepts_a_config_that_matches_the_frozen_set(
     ],
 )
 def test_rejects_any_drift_from_the_frozen_set(
-    tokenizer, fake_generate_batch, frozen_config_kwargs, overrides
+    tokenizer, fake_generate_prompts, frozen_config_kwargs, overrides
 ):
     api = build(tokenizer=tokenizer, module=object())
     with pytest.raises(ValueError, match="frozen decoding parameters"):
@@ -129,7 +130,7 @@ def test_rejects_any_drift_from_the_frozen_set(
 
 
 def test_the_comparison_is_against_qwen_decoding_itself(
-    tokenizer, fake_generate_batch, frozen_config_kwargs, monkeypatch
+    tokenizer, fake_generate_prompts, frozen_config_kwargs, monkeypatch
 ):
     """Were they separate constants, the check could pass while the GPU ran otherwise."""
     monkeypatch.setattr("generation.qwen.DECODING", {**DECODING, "temperature": 0.123})
@@ -140,7 +141,7 @@ def test_the_comparison_is_against_qwen_decoding_itself(
         )
 
 
-def test_a_seed_must_be_present(tokenizer, fake_generate_batch, frozen_config_kwargs):
+def test_a_seed_must_be_present(tokenizer, fake_generate_prompts, frozen_config_kwargs):
     api = build(tokenizer=tokenizer, module=object())
     with pytest.raises(ValueError, match="no seed"):
         anyio.run(
@@ -152,7 +153,7 @@ def test_a_seed_must_be_present(tokenizer, fake_generate_batch, frozen_config_kw
 
 
 def test_any_seed_value_is_accepted(
-    tokenizer, fake_generate_batch, frozen_config_kwargs
+    tokenizer, fake_generate_prompts, frozen_config_kwargs
 ):
     """The provider must stay ignorant of how seeds are derived."""
     api = build(tokenizer=tokenizer, module=object())
@@ -162,7 +163,7 @@ def test_any_seed_value_is_accepted(
         [ChatMessageUser(content="q")],
         config(frozen_config_kwargs, seed=7),
     )
-    assert fake_generate_batch[0]["seed"] == 7
+    assert fake_generate_prompts[0]["seed"] == 7
 
 
 # --- prefill ---------------------------------------------------------------
@@ -198,7 +199,7 @@ def test_anything_but_one_user_turn_is_refused(messages):
 
 
 def test_completion_is_prefill_plus_continuation(
-    tokenizer, fake_generate_batch, frozen_config_kwargs
+    tokenizer, fake_generate_prompts, frozen_config_kwargs
 ):
     """The scorer strips the prefill back off, so it must be a clean prefix."""
     prefill = "Sure, here's how:"
@@ -209,7 +210,7 @@ def test_completion_is_prefill_plus_continuation(
         [ChatMessageUser(content="q"), ChatMessageAssistant(content=prefill)],
         config(frozen_config_kwargs),
     )
-    assert output.completion == prefill + " continuation for q"
+    assert output.completion == prefill + CONTINUATION
     assert output.metadata["prefill"] == prefill
 
 
@@ -217,7 +218,7 @@ def test_completion_is_prefill_plus_continuation(
 
 
 def test_metadata_carries_raw_continuation_and_the_pad_cut_token_count(
-    tokenizer, fake_generate_batch, frozen_config_kwargs
+    tokenizer, fake_generate_prompts, frozen_config_kwargs
 ):
     """Neither survives elsewhere: completion is cleaned, and usage counts padding."""
     api = build(tokenizer=tokenizer, module=object())
@@ -234,23 +235,15 @@ def test_metadata_carries_raw_continuation_and_the_pad_cut_token_count(
 def test_a_thinking_leak_is_flagged(tokenizer, frozen_config_kwargs, monkeypatch):
     """`<think>` survives skip_special_tokens, so a leak is detectable but not visible."""
 
-    def leaky(model, tok, messages, *, seed, prefill="", decoding=DECODING):
+    def leaky(model, tok, prompts, *, seed, decoding=DECODING):
         text = "<think>hmm</think> ok"
         return [
-            Generation(
-                message=messages[0],
-                prefill=prefill,
-                output=text,
-                continuation=text,
-                raw_continuation=text,
-                seed=seed,
-                prompt_tokens=3,
-                new_tokens=5,
-                max_new_tokens=decoding["max_new_tokens"],
+            Continuation(
+                continuation=text, raw_continuation=text, prompt_tokens=3, new_tokens=5
             )
         ], 0.1
 
-    monkeypatch.setattr("generation.qwen.generate_batch", leaky)
+    monkeypatch.setattr("harness.batching.generate_prompts", leaky)
     api = build(tokenizer=tokenizer, module=object())
     output, _ = anyio.run(
         generate, api, [ChatMessageUser(content="q")], config(frozen_config_kwargs)
@@ -261,22 +254,17 @@ def test_a_thinking_leak_is_flagged(tokenizer, frozen_config_kwargs, monkeypatch
 def test_truncation_shows_up_as_a_stop_reason(
     tokenizer, frozen_config_kwargs, monkeypatch
 ):
-    def truncated(model, tok, messages, *, seed, prefill="", decoding=DECODING):
+    def truncated(model, tok, prompts, *, seed, decoding=DECODING):
         return [
-            Generation(
-                message=messages[0],
-                prefill=prefill,
-                output="cut off",
+            Continuation(
                 continuation="cut off",
                 raw_continuation="cut off",
-                seed=seed,
                 prompt_tokens=3,
-                new_tokens=decoding["max_new_tokens"],
-                max_new_tokens=decoding["max_new_tokens"],
+                new_tokens=DECODING["max_new_tokens"],
             )
         ], 0.1
 
-    monkeypatch.setattr("generation.qwen.generate_batch", truncated)
+    monkeypatch.setattr("harness.batching.generate_prompts", truncated)
     api = build(tokenizer=tokenizer, module=object())
     output, _ = anyio.run(
         generate, api, [ChatMessageUser(content="q")], config(frozen_config_kwargs)
@@ -285,7 +273,7 @@ def test_truncation_shows_up_as_a_stop_reason(
 
 
 def test_the_log_records_a_null_module(
-    tmp_path, tokenizer, fake_generate_batch, frozen_config_kwargs
+    tmp_path, tokenizer, fake_generate_prompts, frozen_config_kwargs
 ):
     """A serializer added for the module would break this silently."""
     log = run_eval(tmp_path, tokenizer, frozen_config_kwargs)
@@ -296,7 +284,7 @@ def test_the_log_records_a_null_module(
 
 
 def test_decoding_provenance_lands_in_the_plan_config(
-    tmp_path, tokenizer, fake_generate_batch, frozen_config_kwargs
+    tmp_path, tokenizer, fake_generate_prompts, frozen_config_kwargs
 ):
     """`plan.config` is the merged config that ran; `model_generate_config` is not.
 
@@ -318,7 +306,7 @@ def test_decoding_provenance_lands_in_the_plan_config(
 
 
 def test_an_eval_kwarg_beats_the_task_config_and_the_provider_catches_it(
-    tmp_path, tokenizer, fake_generate_batch, frozen_config_kwargs
+    tmp_path, tokenizer, fake_generate_prompts, frozen_config_kwargs
 ):
     """Why the sampling check sits at the point of use rather than in the task."""
     log = run_eval(tmp_path, tokenizer, frozen_config_kwargs, temperature=0.9)
@@ -329,7 +317,7 @@ def test_an_eval_kwarg_beats_the_task_config_and_the_provider_catches_it(
 
 
 def test_model_call_records_the_rendered_prompt(
-    tokenizer, fake_generate_batch, frozen_config_kwargs
+    tokenizer, fake_generate_prompts, frozen_config_kwargs
 ):
     """The sentinel is what makes a prefill a continuation, so record it."""
     from generation.qwen import THINKING_SENTINEL
