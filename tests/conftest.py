@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import pytest
 from generation.qwen import DECODING, THINKING_SENTINEL, Continuation
+from harness.task import decoding_kwargs
 
 CONTINUATION = " a continuation"
 
@@ -60,11 +61,19 @@ def fake_generate_prompts(monkeypatch):
 
 @pytest.fixture
 def frozen_config_kwargs() -> dict:
-    """Derived from ``qwen.DECODING`` rather than restated, so it cannot drift."""
-    return {
-        "temperature": DECODING["temperature"],
-        "top_p": DECODING["top_p"],
-        "top_k": DECODING["top_k"],
-        "max_tokens": DECODING["max_new_tokens"],
-        "extra_body": {"min_p": DECODING["min_p"], "do_sample": DECODING["do_sample"]},
-    }
+    """The task's own mapping, so a test config cannot drift from a real one."""
+    return decoding_kwargs()
+
+
+@pytest.fixture
+def prefills() -> dict[tuple[int, str], str]:
+    """Stands in for the helper model's output, which needs a GPU to produce."""
+    return _FakePrefills()
+
+
+class _FakePrefills(dict):
+    """Every ``(prompt_id, slot)`` resolves, so a test need not enumerate the set."""
+
+    def __missing__(self, key) -> str:
+        prompt_id, slot = key
+        return f"[{slot} for {prompt_id}]"
