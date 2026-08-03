@@ -1,9 +1,7 @@
 """The coalescer's concurrency contract, exercised with a stand-in forward pass.
 
-The properties here are the ones that fail as a hang or as quietly wrong rows rather
-than as an exception, so each is provoked directly: state must not outlive the event
-loop that built it, a cancelled member must not take the batch with it, and a failed
-batch must reach every member as an ordinary exception.
+These properties fail as a hang or as quietly wrong rows rather than as an exception,
+so each is provoked directly.
 """
 
 from __future__ import annotations
@@ -65,7 +63,7 @@ async def submit_all(gen, pairs, seed=1):
 
 
 def blocking_fake(calls, started, release):
-    """First call blocks on `release`, so later arrivals accumulate behind it."""
+    """First call blocks, so later arrivals accumulate behind it."""
 
     def fake(model, tok, messages, *, seed, prefill="", decoding=DECODING):
         prefills = row_prefills(prefill, len(messages))
@@ -123,7 +121,7 @@ def test_every_member_gets_its_own_row(monkeypatch):
 
 
 def test_a_batch_of_mixed_prefills_keeps_them_per_row(monkeypatch):
-    """Rows share a forward pass but not a prefill, which is the point of batching here."""
+    """Rows share a forward pass but not a prefill."""
     calls = []
     patch(monkeypatch, fake_generate_batch(calls))
     gen = batcher(size=3)
@@ -139,12 +137,8 @@ def test_a_batch_of_mixed_prefills_keeps_them_per_row(monkeypatch):
 # --- the loop-bound state --------------------------------------------------
 
 
-def test_a_cancelled_leader_does_not_poison_later_samples(monkeypatch):
-    """A leader cancelled mid-window must not leave its batch open.
-
-    If it does, every later arrival joins a batch nobody will generate and inherits
-    its failure — one timeout would take down the rest of the condition.
-    """
+def test_a_cancelled_caller_does_not_poison_later_samples(monkeypatch):
+    """Otherwise later arrivals join a batch nobody will generate."""
     patch(monkeypatch, fake_generate_batch())
     gen = batcher(size=8)
 
@@ -162,7 +156,7 @@ def test_a_cancelled_leader_does_not_poison_later_samples(monkeypatch):
 
 
 def test_a_run_starts_with_no_inherited_state(monkeypatch):
-    """The same provider is memoised across evals, so each run must begin clean."""
+    """The same provider is memoised across evals."""
     patch(monkeypatch, fake_generate_batch())
     gen = batcher(size=2)
 
@@ -174,7 +168,7 @@ def test_a_run_starts_with_no_inherited_state(monkeypatch):
 
 
 def test_no_batching_state_exists_before_a_run():
-    """Nothing is built at construction, so a weightless provider costs nothing."""
+    """Nothing is built at construction, so nothing binds to the wrong run."""
     gen = batcher()
     assert gen._gpu is None and gen._open is None and gen._token is None
 
@@ -203,17 +197,12 @@ def test_a_failed_batch_reaches_every_member_as_an_ordinary_exception(monkeypatc
 
     assert len(errors) == 3
     assert all(exc is boom for exc in errors)
-    # A cancellation derives from BaseException, not Exception, so this is the
-    # loop-free way to say "an ordinary error reached them, not someone's cancel".
+    # Not a cancellation, which would be BaseException-only.
     assert all(isinstance(exc, Exception) for exc in errors)
 
 
 def test_cancelling_the_first_arrival_does_not_strand_the_others(monkeypatch):
-    """No member is special, so losing any one of them costs only its own row.
-
-    Under a design where the first arrival drove the batch, this is the case that
-    left everyone else waiting on a batch nobody would run.
-    """
+    """No member is special, so losing one costs only its own row."""
     started, release = threading.Event(), threading.Event()
     calls: list[list[str]] = []
     monkeypatch.setattr(
@@ -231,9 +220,9 @@ def test_cancelling_the_first_arrival_does_not_strand_the_others(monkeypatch):
 
     async def main():
         async with anyio.create_task_group() as tg:
-            tg.start_soon(member, "warmup")  # takes the GPU and holds it
+            tg.start_soon(member, "warmup")  # holds the GPU
             await anyio.to_thread.run_sync(started.wait)
-            tg.start_soon(quitter)           # first into the next batch, then dies
+            tg.start_soon(quitter)
             await anyio.sleep(0.005)
             tg.start_soon(member, "a")
             tg.start_soon(member, "b")
@@ -246,16 +235,11 @@ def test_cancelling_the_first_arrival_does_not_strand_the_others(monkeypatch):
 
 
 def test_a_cancelled_run_leaves_the_batch_for_another_member():
-    """A cancellation must not be recorded as the batch's failure.
+    """Recording it would hand other members someone else's cancel object.
 
-    Marking it done would hand every other member someone else's cancel object;
-    leaving it unfinished lets whoever reaches the GPU next generate it again, and
-    `generate_batch` reseeds per call so the retry produces the same text.
-
-    Asserted directly because the integration path rarely reaches it: with
-    `abandon_on_cancel=False` the forward pass completes before the cancellation is
-    delivered, so in practice a cancelled member still finishes the batch for
-    everyone else.
+    Asserted directly because `abandon_on_cancel=False` means the forward pass
+    usually completes before the cancellation lands, so a cancelled member normally
+    finishes the batch for everyone else.
     """
 
     async def main():
@@ -291,7 +275,7 @@ def test_a_seed_disagreement_is_refused(monkeypatch):
         async with anyio.create_task_group() as tg:
             tg.start_soon(gen.submit, "warmup", "", 1)
             await anyio.to_thread.run_sync(started.wait)
-            tg.start_soon(gen.submit, "a", "", 1)  # opens the next batch at seed 1
+            tg.start_soon(gen.submit, "a", "", 1)  # opens the next batch
             await anyio.sleep(0.005)
             try:
                 await gen.submit("b", "", 2)
@@ -308,11 +292,9 @@ def test_a_seed_disagreement_is_refused(monkeypatch):
 
 
 def test_arrivals_during_a_forward_pass_become_the_next_batch(monkeypatch):
-    """This is what replaces a timer: the wait for the GPU is the collection window.
+    """The wait for the GPU is what a timer would otherwise be.
 
-    The first caller finds the GPU free and generates alone, which is correct — with
-    nothing else queued, waiting for company would only idle the GPU. Everyone who
-    arrives while it runs is generated together.
+    Generating alone when nothing is queued is correct, not a compromise.
     """
     started, release = threading.Event(), threading.Event()
     calls: list[list[str]] = []
@@ -342,7 +324,7 @@ def test_arrivals_during_a_forward_pass_become_the_next_batch(monkeypatch):
 
 
 def test_a_batch_never_exceeds_the_size_cap(monkeypatch):
-    """The cap is a memory bound: the KV cache has to fit alongside the weights."""
+    """The cap is a memory bound, so it must hold however many arrive."""
     started, release = threading.Event(), threading.Event()
     calls: list[list[str]] = []
     monkeypatch.setattr(

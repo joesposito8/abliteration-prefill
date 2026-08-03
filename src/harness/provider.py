@@ -127,8 +127,7 @@ class QwenLocalAPI(ModelAPI):
             "thinking_leak": contains_thinking(generation.raw_continuation),
             "prefill": prefill,
             "seed": seed,
-            # Composition is arrival-dependent, so it is recorded rather than
-            # reproducible: a row is only replayable as part of the same batch.
+            # Composition is arrival-dependent, so it is recorded, not replayable.
             "batch_size": row.batch_size,
             "batch_index": row.batch_index,
         }
