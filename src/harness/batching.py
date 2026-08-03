@@ -11,7 +11,6 @@ from dataclasses import asdict, dataclass, field
 
 import anyio
 import anyio.lowlevel
-from anyio import get_cancelled_exc_class
 from generation.qwen import Continuation, generate_prompts
 
 # A memory bound: the KV cache for this many 512-token sequences must fit alongside
@@ -99,12 +98,11 @@ class BatchGenerator:
             self._open = None
 
     async def _generate(self, batch: _Batch) -> None:
+        # Cancellation and process-ending signals are not Exceptions, so they
+        # propagate and leave the batch unfinished for the next member to run.
         try:
             batch.result, batch.seconds = await self._run(batch)
-        except get_cancelled_exc_class():
-            # Left unfinished rather than failed, so the next member regenerates it.
-            raise
-        except BaseException as exc:
+        except Exception as exc:
             batch.error = exc
         batch.done = True
 

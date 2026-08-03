@@ -283,6 +283,28 @@ def test_a_cancelled_run_leaves_the_batch_for_another_member():
     assert error is None
 
 
+def test_a_process_ending_signal_propagates_untouched():
+    """A Ctrl-C must reach the caller, not become every member's error."""
+
+    async def main():
+        gen = batcher(size=8)
+        gen._rebind()
+        batch = _Batch(seed=1)
+        batch.prompts.append("a")
+
+        async def interrupted(_batch):
+            raise KeyboardInterrupt
+
+        gen._run = interrupted
+        with pytest.raises(KeyboardInterrupt):
+            await gen._generate(batch)
+        return batch.done, batch.error
+
+    done, error = anyio.run(main)
+    assert not done
+    assert error is None
+
+
 def test_a_seed_disagreement_is_refused(monkeypatch):
     """One seed covers a whole condition, so two in one batch means two conditions."""
     started, release = threading.Event(), threading.Event()
