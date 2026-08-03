@@ -1,9 +1,13 @@
 """Coalesces concurrent single-sample calls into one batched forward pass.
 
 Inspect drives many samples at once but hands the provider one at a time, and a
-4B model generating a single sequence leaves most of the GPU idle. Arrivals are
-therefore collected until the batch is full or a short window passes, then generated
-together.
+4B model generating a single sequence leaves most of the GPU idle.
+
+Batches form from contention rather than from a timer: every caller queues for the
+GPU, and whoever reaches it first generates whatever has accumulated behind it. So a
+batch is exactly the arrivals that piled up during the previous forward pass, which
+is self-tuning — when the GPU is the bottleneck, batches are full; when it is idle,
+waiting for company would only idle it longer.
 
 Any arrivals form a batch. A prefill is folded into its own prompt before
 tokenization and left padding absorbs the resulting length differences, so rows need
@@ -24,16 +28,15 @@ from anyio import get_cancelled_exc_class
 if TYPE_CHECKING:
     from generation.qwen import Generation
 
+# Rows per forward pass. A memory bound, not a latency knob: the KV cache for this
+# many 512-token sequences has to fit alongside the weights. Confirm against real
+# headroom on the pilot.
 BATCH = 32
 
 # Samples allowed inside the provider at once. Twice the batch width because the
 # connection limiter is held across the whole provider call: at 1x the running batch
 # owns every permit, so the next one cannot begin to assemble.
 IN_FLIGHT = 2 * BATCH
-
-# Fires only when a batch fails to fill — the tail of a condition, or a stall. In
-# steady state batches fill on size and this never elapses.
-WINDOW = 0.2
 
 
 @dataclass
@@ -50,28 +53,25 @@ class Row:
 class _Batch:
     seed: int
     rows: list[tuple[str, str]] = field(default_factory=list)
-    full: anyio.Event = field(default_factory=anyio.Event)
-    ready: anyio.Event = field(default_factory=anyio.Event)
     result: list[Generation] = field(default_factory=list)
     error: BaseException | None = None
     seconds: float = 0.0
+    done: bool = False
 
 
 class BatchGenerator:
     """Gathers ``(message, prefill)`` arrivals and generates them together.
 
-    The first caller into an empty batch leads it: it waits for the batch to fill or
-    the window to pass, runs the forward pass, and hands every member its row. There
-    is no background task, so nothing outlives the run that created it.
+    Every caller runs the same code: join the open batch, queue for the GPU, and
+    generate the batch if nobody has yet. No member is designated in advance and
+    there is no background task, so nothing can outlive the run that created it and
+    no failure is special to one participant.
     """
 
-    def __init__(
-        self, module, tokenizer, *, size: int = BATCH, window: float = WINDOW
-    ) -> None:
+    def __init__(self, module, tokenizer, *, size: int = BATCH) -> None:
         self._module = module
         self._tokenizer = tokenizer
         self._size = size
-        self._window = window
         self._token = None
         self._gpu: anyio.CapacityLimiter | None = None
         self._open: _Batch | None = None
@@ -79,10 +79,10 @@ class BatchGenerator:
     async def submit(self, message: str, prefill: str, seed: int) -> Row:
         batch, index = self._join(message, prefill, seed)
 
-        if index == 0:
-            await self._lead(batch)
-        else:
-            await batch.ready.wait()
+        async with self._gpu:
+            if not batch.done:
+                self._close(batch)
+                await self._generate(batch)
 
         if batch.error is not None:
             raise batch.error
@@ -115,40 +115,25 @@ class BatchGenerator:
         index = len(batch.rows)
         batch.rows.append((message, prefill))
         if len(batch.rows) >= self._size:
-            self._open = None
-            batch.full.set()
+            self._close(batch)
         return batch, index
 
-    async def _lead(self, batch: _Batch) -> None:
+    def _close(self, batch: _Batch) -> None:
+        """Stop this batch accepting rows; the next arrival opens a new one."""
+        if self._open is batch:
+            self._open = None
+
+    async def _generate(self, batch: _Batch) -> None:
         try:
-            with anyio.move_on_after(self._window):
-                await batch.full.wait()
-
-            # Intake closes before the GPU is claimed, so the next batch assembles
-            # while this one runs rather than after it.
-            if self._open is batch:
-                self._open = None
-
-            async with self._gpu:
-                batch.result, batch.seconds = await self._run(batch)
+            batch.result, batch.seconds = await self._run(batch)
         except get_cancelled_exc_class():
-            # Followers must be woken with an ordinary exception: handing them
-            # another task's cancellation is not a valid cancel in their scope.
-            batch.error = RuntimeError(
-                "the batch leader was cancelled before its forward pass completed"
-            )
+            # Left unfinished on purpose. The next member to reach the GPU runs it
+            # again, and `generate_batch` reseeds per call, so the retry produces the
+            # same text rather than a second, different sample.
             raise
         except BaseException as exc:
-            # Not re-raised: `submit` raises it for the leader too, so every member
-            # of a failed batch fails identically.
             batch.error = exc
-        finally:
-            # Also on the cancelled path, where the early close above never ran.
-            # A batch left open here would collect later arrivals into a batch whose
-            # leader is gone, and hand them its failure.
-            if self._open is batch:
-                self._open = None
-            batch.ready.set()
+        batch.done = True
 
     async def _run(self, batch: _Batch) -> tuple[list[Generation], float]:
         from generation.qwen import generate_batch
@@ -170,8 +155,8 @@ class BatchGenerator:
 
         Inspect memoises a provider on its model name, so the same instance is handed
         back across ``eval()`` calls, each on a fresh event loop. anyio's primitives
-        themselves survive that, but a batch left open by an abruptly torn-down run
-        would collect this run's samples into a batch that will never generate.
+        themselves survive that, but a batch carried over would generate rows whose
+        callers are long gone.
         """
         token = anyio.lowlevel.current_token()
         if token != self._token:

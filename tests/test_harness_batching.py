@@ -13,7 +13,7 @@ import threading
 import anyio
 import pytest
 from generation.qwen import DECODING, Generation, row_prefills
-from harness.batching import BATCH, IN_FLIGHT, BatchGenerator
+from harness.batching import BATCH, IN_FLIGHT, BatchGenerator, _Batch
 
 
 def fake_generate_batch(calls=None, *, seconds=0.5, fail=None):
@@ -47,8 +47,8 @@ def patch(monkeypatch, fake):
     monkeypatch.setattr("generation.qwen.generate_batch", fake)
 
 
-def batcher(size=BATCH, window=0.05):
-    return BatchGenerator(object(), object(), size=size, window=window)
+def batcher(size=BATCH):
+    return BatchGenerator(object(), object(), size=size)
 
 
 async def submit_all(gen, pairs, seed=1):
@@ -64,13 +64,34 @@ async def submit_all(gen, pairs, seed=1):
     return rows
 
 
-# --- what fires a batch ----------------------------------------------------
+def blocking_fake(calls, started, release):
+    """First call blocks on `release`, so later arrivals accumulate behind it."""
+
+    def fake(model, tok, messages, *, seed, prefill="", decoding=DECODING):
+        prefills = row_prefills(prefill, len(messages))
+        calls.append(list(messages))
+        if len(calls) == 1:
+            started.set()
+            release.wait(5)
+        return [
+            Generation(
+                message=m, prefill=p, output=p + f"<{m}>", continuation=f"<{m}>",
+                raw_continuation=f"<{m}>", seed=seed, prompt_tokens=1, new_tokens=1,
+                max_new_tokens=decoding["max_new_tokens"],
+            )
+            for m, p in zip(messages, prefills)
+        ], 0.1
+
+    return fake
+
+
+# --- how batches form ----------------------------------------------------
 
 
 def test_a_full_batch_fires_on_size(monkeypatch):
     calls = []
     patch(monkeypatch, fake_generate_batch(calls))
-    gen = batcher(size=4, window=30)  # a window this long would hang if size did not fire
+    gen = batcher(size=4)
 
     rows = anyio.run(submit_all, gen, [(f"m{i}", "") for i in range(4)])
 
@@ -83,7 +104,7 @@ def test_a_full_batch_fires_on_size(monkeypatch):
 def test_a_short_batch_fires_on_the_window(monkeypatch):
     calls = []
     patch(monkeypatch, fake_generate_batch(calls))
-    gen = batcher(size=32, window=0.01)
+    gen = batcher(size=32)
 
     rows = anyio.run(submit_all, gen, [("only", "")])
 
@@ -93,7 +114,7 @@ def test_a_short_batch_fires_on_the_window(monkeypatch):
 
 def test_every_member_gets_its_own_row(monkeypatch):
     patch(monkeypatch, fake_generate_batch())
-    gen = batcher(size=3, window=30)
+    gen = batcher(size=3)
 
     rows = anyio.run(submit_all, gen, [("a", ""), ("b", ""), ("c", "")])
 
@@ -105,7 +126,7 @@ def test_a_batch_of_mixed_prefills_keeps_them_per_row(monkeypatch):
     """Rows share a forward pass but not a prefill, which is the point of batching here."""
     calls = []
     patch(monkeypatch, fake_generate_batch(calls))
-    gen = batcher(size=3, window=30)
+    gen = batcher(size=3)
 
     rows = anyio.run(
         submit_all, gen, [("a", "Sure:"), ("b", ""), ("c", "Step 1.")]
@@ -125,7 +146,7 @@ def test_a_cancelled_leader_does_not_poison_later_samples(monkeypatch):
     its failure — one timeout would take down the rest of the condition.
     """
     patch(monkeypatch, fake_generate_batch())
-    gen = batcher(size=8, window=0.05)
+    gen = batcher(size=8)
 
     async def main():
         with anyio.move_on_after(0.01):
@@ -143,7 +164,7 @@ def test_a_cancelled_leader_does_not_poison_later_samples(monkeypatch):
 def test_a_run_starts_with_no_inherited_state(monkeypatch):
     """The same provider is memoised across evals, so each run must begin clean."""
     patch(monkeypatch, fake_generate_batch())
-    gen = batcher(size=2, window=0.01)
+    gen = batcher(size=2)
 
     first = anyio.run(submit_all, gen, [("a", ""), ("b", "")])
     second = anyio.run(submit_all, gen, [("c", ""), ("d", "")])
@@ -164,14 +185,13 @@ def test_no_batching_state_exists_before_a_run():
 def test_a_failed_batch_reaches_every_member_as_an_ordinary_exception(monkeypatch):
     boom = RuntimeError("CUDA out of memory")
     patch(monkeypatch, fake_generate_batch(fail=boom))
-    gen = batcher(size=3, window=30)
-
+    gen = batcher(size=3)
     errors: list = []
 
     async def collect(message):
         try:
             await gen.submit(message, "", 1)
-        except BaseException as exc:  # noqa: BLE001 - the type is what is asserted
+        except BaseException as exc:  # noqa: BLE001 - the type is the assertion
             errors.append(exc)
 
     async def main():
@@ -188,107 +208,118 @@ def test_a_failed_batch_reaches_every_member_as_an_ordinary_exception(monkeypatc
     assert all(isinstance(exc, Exception) for exc in errors)
 
 
-def test_a_cancelled_leader_wakes_followers_with_an_ordinary_exception(monkeypatch):
-    """Handing followers the leader's own cancellation is not a valid cancel in their
-    scope, and corrupts the bookkeeping of whatever scope does receive it."""
-    patch(monkeypatch, fake_generate_batch())
-    gen = batcher(size=8, window=30)
-    caught: list = []
+def test_cancelling_the_first_arrival_does_not_strand_the_others(monkeypatch):
+    """No member is special, so losing any one of them costs only its own row.
 
-    async def leader():
-        with anyio.move_on_after(0.02):
-            await gen.submit("a", "", 1)
-
-    async def follower():
-        await anyio.sleep(0.005)  # join after the leader has opened the batch
-        try:
-            await gen.submit("b", "", 1)
-        except BaseException as exc:  # noqa: BLE001 - the type is the assertion
-            caught.append(exc)
-
-    async def main():
-        async with anyio.create_task_group() as tg:
-            tg.start_soon(leader)
-            tg.start_soon(follower)
-
-    anyio.run(main)
-
-    assert len(caught) == 1
-    assert isinstance(caught[0], Exception)  # not BaseException-only, i.e. not a cancel
-    assert "cancelled" in str(caught[0])
-
-
-def test_one_member_cancelled_mid_batch_leaves_the_rest_intact(monkeypatch):
-    """`attempt_timeout` wraps each provider call in its own cancel scope, so this
-    is a case the framework really produces."""
-    patch(monkeypatch, fake_generate_batch())
-    gen = batcher(size=3, window=0.05)
+    Under a design where the first arrival drove the batch, this is the case that
+    left everyone else waiting on a batch nobody would run.
+    """
+    started, release = threading.Event(), threading.Event()
+    calls: list[list[str]] = []
+    monkeypatch.setattr(
+        "generation.qwen.generate_batch", blocking_fake(calls, started, release)
+    )
+    gen = batcher(size=8)
     survived: list = []
 
     async def member(message):
         survived.append(await gen.submit(message, "", 1))
 
     async def quitter():
-        with anyio.move_on_after(0.001):
+        with anyio.move_on_after(0.02):
             await gen.submit("gone", "", 1)
 
     async def main():
         async with anyio.create_task_group() as tg:
-            tg.start_soon(quitter)
+            tg.start_soon(member, "warmup")  # takes the GPU and holds it
+            await anyio.to_thread.run_sync(started.wait)
+            tg.start_soon(quitter)           # first into the next batch, then dies
+            await anyio.sleep(0.005)
             tg.start_soon(member, "a")
             tg.start_soon(member, "b")
+            await anyio.sleep(0.05)
+            release.set()
 
     anyio.run(main)
 
-    assert sorted(r.generation.message for r in survived) == ["a", "b"]
+    assert sorted(r.generation.message for r in survived) == ["a", "b", "warmup"]
+
+
+def test_a_cancelled_run_leaves_the_batch_for_another_member():
+    """A cancellation must not be recorded as the batch's failure.
+
+    Marking it done would hand every other member someone else's cancel object;
+    leaving it unfinished lets whoever reaches the GPU next generate it again, and
+    `generate_batch` reseeds per call so the retry produces the same text.
+
+    Asserted directly because the integration path rarely reaches it: with
+    `abandon_on_cancel=False` the forward pass completes before the cancellation is
+    delivered, so in practice a cancelled member still finishes the batch for
+    everyone else.
+    """
+
+    async def main():
+        gen = batcher(size=8)
+        gen._rebind()
+        batch = _Batch(seed=1)
+        batch.rows.append(("a", ""))
+
+        async def cancelled(_batch):
+            raise anyio.get_cancelled_exc_class()()
+
+        gen._run = cancelled
+        with pytest.raises(anyio.get_cancelled_exc_class()):
+            await gen._generate(batch)
+        return batch.done, batch.error
+
+    done, error = anyio.run(main)
+    assert not done
+    assert error is None
 
 
 def test_a_seed_disagreement_is_refused(monkeypatch):
     """One seed covers a whole condition, so two in one batch means two conditions."""
-    patch(monkeypatch, fake_generate_batch())
-    gen = batcher(size=4, window=30)
+    started, release = threading.Event(), threading.Event()
+    calls: list[list[str]] = []
+    monkeypatch.setattr(
+        "generation.qwen.generate_batch", blocking_fake(calls, started, release)
+    )
+    gen = batcher(size=8)
+    raised: list = []
 
     async def main():
         async with anyio.create_task_group() as tg:
-            tg.start_soon(gen.submit, "a", "", 1)
-            await anyio.sleep(0.01)
-            with pytest.raises(ValueError, match="asks for 2"):
+            tg.start_soon(gen.submit, "warmup", "", 1)
+            await anyio.to_thread.run_sync(started.wait)
+            tg.start_soon(gen.submit, "a", "", 1)  # opens the next batch at seed 1
+            await anyio.sleep(0.005)
+            try:
                 await gen.submit("b", "", 2)
-            tg.cancel_scope.cancel()
+            except ValueError as exc:
+                raised.append(exc)
+            release.set()
 
     anyio.run(main)
 
+    assert len(raised) == 1 and "asks for 2" in str(raised[0])
 
-# --- pipeline depth --------------------------------------------------------
+
+# --- batches form from contention ------------------------------------------
 
 
-def test_a_second_batch_assembles_while_the_first_holds_the_gpu(monkeypatch):
-    """Intake closes before the GPU is claimed.
+def test_arrivals_during_a_forward_pass_become_the_next_batch(monkeypatch):
+    """This is what replaces a timer: the wait for the GPU is the collection window.
 
-    If it closed after, arrivals during a forward pass would be appended to a batch
-    that is already generating, and their rows would never be produced at all.
+    The first caller finds the GPU free and generates alone, which is correct — with
+    nothing else queued, waiting for company would only idle the GPU. Everyone who
+    arrives while it runs is generated together.
     """
     started, release = threading.Event(), threading.Event()
     calls: list[list[str]] = []
-
-    def fake(model, tok, messages, *, seed, prefill="", decoding=DECODING):
-        calls.append(list(messages))
-        if len(calls) == 1:
-            started.set()
-            release.wait(5)  # hold the "GPU" while the next batch forms
-        return [
-            Generation(
-                message=m, prefill="", output=f"<{m}>", continuation=f"<{m}>",
-                raw_continuation=f"<{m}>", seed=seed, prompt_tokens=1, new_tokens=1,
-                max_new_tokens=decoding["max_new_tokens"],
-            )
-            for m in messages
-        ], 0.1
-
-    monkeypatch.setattr("generation.qwen.generate_batch", fake)
-    # Size 8 with one arrival: the batch fires on the window, so the leader's own
-    # close is the only thing that can close intake before the forward pass.
-    gen = batcher(size=8, window=0.01)
+    monkeypatch.setattr(
+        "generation.qwen.generate_batch", blocking_fake(calls, started, release)
+    )
+    gen = batcher(size=32)
     rows: dict = {}
 
     async def one(message):
@@ -296,23 +327,43 @@ def test_a_second_batch_assembles_while_the_first_holds_the_gpu(monkeypatch):
 
     async def main():
         async with anyio.create_task_group() as tg:
-            tg.start_soon(one, "a")
+            tg.start_soon(one, "first")
             await anyio.to_thread.run_sync(started.wait)
-
-            tg.start_soon(one, "c")
-            tg.start_soon(one, "d")
+            for m in "cdefgh":
+                tg.start_soon(one, m)
             await anyio.sleep(0.05)
-            in_flight = list(calls)
             release.set()
-        return in_flight
 
-    in_flight = anyio.run(main)
+    anyio.run(main)
 
-    # While the first batch held the GPU the second had assembled but not run.
-    assert in_flight == [["a"]]
-    assert calls == [["a"], ["c", "d"]]
-    assert rows["c"].generation.continuation == "<c>"
-    assert [rows[m].batch_index for m in ("c", "d")] == [0, 1]
+    assert calls == [["first"], ["c", "d", "e", "f", "g", "h"]]
+    assert len(rows) == 7
+    assert rows["h"].batch_size == 6
+
+
+def test_a_batch_never_exceeds_the_size_cap(monkeypatch):
+    """The cap is a memory bound: the KV cache has to fit alongside the weights."""
+    started, release = threading.Event(), threading.Event()
+    calls: list[list[str]] = []
+    monkeypatch.setattr(
+        "generation.qwen.generate_batch", blocking_fake(calls, started, release)
+    )
+    gen = batcher(size=3)
+
+    async def main():
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(gen.submit, "first", "", 1)
+            await anyio.to_thread.run_sync(started.wait)
+            for i in range(7):
+                tg.start_soon(gen.submit, f"m{i}", "", 1)
+            await anyio.sleep(0.05)
+            release.set()
+
+    anyio.run(main)
+
+    assert calls[0] == ["first"]
+    assert all(len(c) <= 3 for c in calls)
+    assert sum(len(c) for c in calls) == 8
 
 
 # --- the constants ---------------------------------------------------------
