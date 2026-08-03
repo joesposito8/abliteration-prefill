@@ -117,25 +117,6 @@ def test_contains_thinking(text, expected):
     assert contains_thinking(text) is expected
 
 
-# --- per-row prefills ------------------------------------------------------
-
-
-def test_a_single_prefill_broadcasts_to_every_row():
-    assert qwen.row_prefills("Sure:", 3) == ["Sure:", "Sure:", "Sure:"]
-
-
-def test_one_prefill_per_row_is_kept_in_order():
-    assert qwen.row_prefills(["a", "", "c"], 3) == ["a", "", "c"]
-
-
-@pytest.mark.parametrize("prefills", [["a"], ["a", "b", "c", "d"]])
-def test_a_mismatched_prefill_count_raises_rather_than_truncating(prefills):
-    """`zip` would silently pair prefills with the wrong rows and return `output`
-    strings that do not match the text generated."""
-    with pytest.raises(ValueError, match="prefills for 3 messages"):
-        qwen.row_prefills(prefills, 3)
-
-
 # --- rendering layered over the forward pass -------------------------------
 
 
@@ -159,16 +140,18 @@ def fake_prompts(monkeypatch, seconds=0.5):
     return calls
 
 
-def test_generate_batch_folds_each_prefill_into_its_own_prompt(monkeypatch):
+def test_each_row_keeps_its_own_message_and_continuation(monkeypatch):
+    """A mispaired zip would hand rows each other's text with nothing to flag it."""
+    messages = ["m0", "m1", "m2"]
     calls = fake_prompts(monkeypatch)
 
     generations, _ = qwen.generate_batch(
-        None, FakeTokenizer(), ["m0", "m1"], seed=1, prefill=["A:", "B:"]
+        None, FakeTokenizer(), messages, seed=1, prefill="A:"
     )
 
-    assert [p.endswith(("A:", "B:")) for p in calls[0]] == [True, True]
-    assert [g.prefill for g in generations] == ["A:", "B:"]
-    assert [g.output for g in generations] == ["A:<0>", "B:<1>"]
+    assert [g.message for g in generations] == messages
+    assert [g.output for g in generations] == ["A:<0>", "A:<1>", "A:<2>"]
+    assert all(message in prompt for message, prompt in zip(messages, calls[0]))
 
 
 def test_generate_is_a_single_row_batch(monkeypatch):
