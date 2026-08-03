@@ -1,21 +1,17 @@
 """An Inspect provider for an in-memory Qwen3 model.
 
-The built-in ``hf`` provider cannot be used: it loads a model from a name, and this
-one is a mutable object passed in by the caller; and it renders with
-``add_generation_prompt=True``, which closes the assistant turn, so a prefill would
-be answered rather than continued.
+The built-in ``hf`` provider loads a model from a name, and this one is a mutable
+object passed in by the caller; it also renders with ``add_generation_prompt=True``,
+which closes the assistant turn so a prefill is answered rather than continued.
 
-The module and tokenizer arrive as ``model_args``, reaching this constructor as live
-objects but serialising to ``null`` in the log, since JSON cannot hold them.
+The module and tokenizer arrive as ``model_args``, live here but serialised to
+``null`` in the log. Construction must therefore succeed without them, since
+``score()`` rebuilds the model from the log before running any scorer; only
+:meth:`generate` refuses.
 
-Construction must therefore succeed without them: ``score()`` rebuilds the model
-from the log before running any scorer, so demanding weights here would break every
-grading pass. Only :meth:`generate` refuses.
-
-Inspect memoises providers on the model name plus the *serialised* ``model_args``,
-and everything unserialisable serialises to ``None``. Two different modules under
-one model name therefore collide, and the second caller silently gets the first
-module. Encoding the condition in the model name is what avoids this.
+Providers are memoised on the model name plus the *serialised* ``model_args``, and
+everything unserialisable serialises to ``None`` — so two modules under one name
+collide, and the second caller gets the first module.
 """
 
 from __future__ import annotations
@@ -42,8 +38,7 @@ class QwenLocalAPI(ModelAPI):
     """Generates from a module handed in as a model argument.
 
     The model name carries the condition, but this class never parses it: which
-    weights it holds is the caller's business, so it cannot mislabel a condition and
-    can be tested against an unedited model.
+    weights it holds is the caller's business.
     """
 
     def __init__(
@@ -66,7 +61,7 @@ class QwenLocalAPI(ModelAPI):
         self._batcher = BatchGenerator(module, tokenizer)
 
         if tokenizer is not None:
-            # Fail on a broken chat template now rather than after hours of generation.
+            # Fail on a broken chat template before any generation.
             build_prompt(tokenizer, "startup check")
 
     def max_connections(self) -> int:
@@ -100,9 +95,8 @@ class QwenLocalAPI(ModelAPI):
 
         output = ModelOutput.from_content(
             model=self.model_name,
-            # The whole assistant turn. Inspect appends the generated message after a
-            # prefill rather than merging, so returning the continuation alone would
-            # make every scorer reassemble the string again.
+            # Inspect appends the generated message after a prefill rather than
+            # merging, so the whole assistant turn is assembled here instead.
             content=prefill + row.continuation,
             stop_reason=(
                 "max_tokens"
@@ -168,11 +162,9 @@ def split_prefill(input: list[ChatMessage]) -> tuple[str, str]:
 def require_frozen_decoding(config: GenerateConfig) -> dict[str, Any]:
     """Check the config's decoding parameters against the frozen set, and return them.
 
-    Checked here rather than trusted from the task, because an ``eval()`` keyword
-    argument wins the config merge and would otherwise change the text silently.
-    Compared against ``qwen.DECODING`` because that is the object ``generate_prompts``
-    passes to ``model.generate``, so agreement here means agreement at the forward
-    pass.
+    Checked at the point of use because an ``eval()`` keyword argument wins the config
+    merge, and against ``qwen.DECODING`` because that is the object ``generate_prompts``
+    passes to ``model.generate``.
     """
     from generation.qwen import DECODING
 
@@ -205,11 +197,7 @@ def require_frozen_decoding(config: GenerateConfig) -> dict[str, Any]:
 
 
 def require_seed(config: GenerateConfig) -> int:
-    """The seed for this call, which must be present but may be any value.
-
-    Presence rather than a particular value, so the provider stays ignorant of how
-    seeds are derived and a disagreement is detectable in the log instead.
-    """
+    """The seed for this call, which must be present but may be any value."""
     if config.seed is None:
         raise ValueError(
             "no seed in the generate config; batched sampling consumes one RNG "

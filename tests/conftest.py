@@ -1,7 +1,7 @@
 """Shared doubles for the harness tests.
 
-Fakes cover only what cannot run locally — a tokenizer's chat template and a batched
-forward pass — so a failure means the harness is wrong rather than a fake is.
+Only what cannot run locally is faked: a tokenizer's chat template and a batched
+forward pass.
 """
 
 from __future__ import annotations
@@ -13,14 +13,9 @@ CONTINUATION = " a continuation"
 
 
 class FakeTokenizer:
-    """Renders the shape ``build_prompt`` checks for, sentinel included.
+    """Renders the shape ``build_prompt`` checks for, honouring ``enable_thinking``."""
 
-    Honours ``enable_thinking`` the way the real template does, so forgetting the
-    flag fails here exactly as it would against the real tokenizer.
-    """
-
-    def __init__(self, *, enable_thinking_honoured: bool = True) -> None:
-        self.enable_thinking_honoured = enable_thinking_honoured
+    enable_thinking_honoured = True
 
     def apply_chat_template(
         self, messages, *, tokenize, add_generation_prompt, enable_thinking
@@ -59,7 +54,6 @@ def fake_generate_prompts(monkeypatch):
             for _ in prompts
         ], 0.5
 
-    monkeypatch.setattr("generation.qwen.generate_prompts", fake)
     monkeypatch.setattr("harness.batching.generate_prompts", fake)
     return calls
 

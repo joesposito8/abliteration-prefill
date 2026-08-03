@@ -308,7 +308,6 @@ def test_decoding_provenance_lands_in_the_plan_config(
 def test_an_eval_kwarg_beats_the_task_config_and_the_provider_catches_it(
     tmp_path, tokenizer, fake_generate_prompts, frozen_config_kwargs
 ):
-    """Why the sampling check sits at the point of use rather than in the task."""
     log = run_eval(tmp_path, tokenizer, frozen_config_kwargs, temperature=0.9)
 
     assert log.status == "error"

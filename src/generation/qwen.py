@@ -223,11 +223,7 @@ def generate_prompts(
     seed: int,
     decoding=DECODING,
 ) -> tuple[list[Continuation], float]:
-    """Run already-rendered prompts through the model in one batched call.
-
-    The only path to the GPU. Knows nothing of prefills: whatever distinguishes the
-    rows is already in the prompt strings.
-    """
+    """Run already-rendered prompts through the model in one batched call."""
     import torch
 
     # Left padding keeps the prompt the same length for every row, so generated

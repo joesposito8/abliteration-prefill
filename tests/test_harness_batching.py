@@ -1,7 +1,6 @@
 """The coalescer's concurrency contract, exercised with a stand-in forward pass.
 
-These properties fail as a hang or as quietly wrong rows rather than as an exception,
-so each is provoked directly.
+These properties fail as a hang or as wrong rows rather than as an exception.
 """
 
 from __future__ import annotations
@@ -87,7 +86,6 @@ def test_a_full_batch_generates_together(monkeypatch):
 
 
 def test_a_lone_caller_generates_immediately(monkeypatch):
-    """With nothing queued there is nothing to wait for."""
     calls: list = []
     patch(monkeypatch, recording_fake(calls))
 
@@ -106,7 +104,6 @@ def test_every_member_gets_its_own_row(monkeypatch):
 
 
 def test_arrivals_during_a_forward_pass_become_the_next_batch(monkeypatch):
-    """The wait for the GPU is what a timer would otherwise be."""
     started, release = threading.Event(), threading.Event()
     calls: list = []
     patch(monkeypatch, blocking_fake(calls, started, release))
@@ -135,7 +132,6 @@ def test_arrivals_during_a_forward_pass_become_the_next_batch(monkeypatch):
 
 
 def test_a_batch_never_exceeds_the_size_cap(monkeypatch):
-    """The cap is a memory bound, so it must hold however many arrive."""
     started, release = threading.Event(), threading.Event()
     calls: list = []
     patch(monkeypatch, blocking_fake(calls, started, release))
@@ -173,7 +169,6 @@ def test_a_run_starts_with_no_inherited_state(monkeypatch):
 
 
 def test_no_batching_state_exists_before_a_run():
-    """Nothing is built at construction, so nothing binds to the wrong run."""
     gen = batcher()
     assert gen._gpu is None and gen._open is None and gen._token is None
 
@@ -233,7 +228,6 @@ def test_a_cancelled_caller_does_not_poison_later_samples(monkeypatch):
 
 
 def test_cancelling_one_member_leaves_the_rest_intact(monkeypatch):
-    """No member is special, so losing one costs only its own row."""
     started, release = threading.Event(), threading.Event()
     calls: list = []
     patch(monkeypatch, blocking_fake(calls, started, release))
@@ -266,9 +260,8 @@ def test_cancelling_one_member_leaves_the_rest_intact(monkeypatch):
 def test_a_cancelled_run_leaves_the_batch_for_another_member():
     """Recording it would hand other members someone else's cancel object.
 
-    Asserted directly because `abandon_on_cancel=False` means the forward pass
-    usually completes before the cancellation lands, so a cancelled member normally
-    finishes the batch for everyone else.
+    Asserted directly: `abandon_on_cancel=False` means the forward pass usually
+    completes before the cancellation lands, so this rarely happens in practice.
     """
 
     async def main():
@@ -319,5 +312,4 @@ def test_a_seed_disagreement_is_refused(monkeypatch):
 
 
 def test_in_flight_is_twice_the_batch_width():
-    """At 1x the running batch owns every connection permit and the next cannot form."""
     assert IN_FLIGHT == 2 * BATCH

@@ -1,13 +1,8 @@
 """Coalesces concurrent single-sample calls into one batched forward pass.
 
-Every caller queues for the GPU and whoever reaches it first generates whatever
-accumulated behind it, so a batch is the arrivals during the previous forward pass.
-No timer: while the GPU is busy the next batch fills, and while it is idle there is
-nothing to wait for.
-
-Rows need nothing in common: whatever distinguishes them is already in the prompt
-string, and left padding absorbs the length differences. Composition is therefore
-arrival-dependent, and the seed characterises a batch rather than a row.
+A batch is whatever accumulated while the previous one held the GPU. Rows need
+nothing in common, since left padding absorbs the length differences, so composition
+is arrival-dependent and the seed characterises a batch rather than a row.
 """
 
 from __future__ import annotations
@@ -48,11 +43,7 @@ class _Batch:
 
 
 class BatchGenerator:
-    """Gathers arriving prompts and generates them together.
-
-    Every caller runs the same code, so no member is special and there is no
-    background task to outlive the run.
-    """
+    """Gathers arriving prompts and generates them together."""
 
     def __init__(self, module, tokenizer, *, size: int = BATCH) -> None:
         self._module = module
@@ -82,8 +73,7 @@ class BatchGenerator:
     def _join(self, prompt: str, seed: int) -> tuple[_Batch, int]:
         """Claim a place in the open batch, or open one.
 
-        Synchronous on purpose: no await between choosing a batch and joining it, so
-        it cannot be closed and generated in between.
+        Synchronous, so the batch cannot close between being chosen and joined.
         """
         self._rebind()
 
@@ -104,7 +94,7 @@ class BatchGenerator:
         return batch, index
 
     def _close(self, batch: _Batch) -> None:
-        """Stop this batch accepting rows; the next arrival opens a new one."""
+        """Stop this batch accepting prompts; the next arrival opens a new one."""
         if self._open is batch:
             self._open = None
 
@@ -126,10 +116,10 @@ class BatchGenerator:
         )
 
     def _rebind(self) -> None:
-        """Start each run with no inherited batching state.
+        """Start each run clean.
 
         A provider is memoised across ``eval()`` calls, so a batch carried over would
-        generate rows whose callers are long gone.
+        generate rows whose callers are gone.
         """
         token = anyio.lowlevel.current_token()
         if token != self._token:
