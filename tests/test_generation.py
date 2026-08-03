@@ -5,9 +5,9 @@ Whether the model actually *continues* a prefill, honours a seed, or reaches a g
 throughput needs real weights, and is asserted by the on-GPU smoke harness instead.
 """
 
-import inspect
-
 import dataclasses
+import inspect
+from types import SimpleNamespace
 
 import pytest
 from conftest import FakeTokenizer
@@ -42,6 +42,15 @@ class _NoSentinelTokenizer:
 
     def apply_chat_template(self, messages, **kwargs):
         return "<|im_start|>assistant\n"
+
+
+class _Encoded:
+    """Only what the forward pass touches before it seeds."""
+
+    input_ids = SimpleNamespace(shape=(2, 5))
+
+    def to(self, device):
+        return self
 
 
 def test_prompt_ends_with_thinking_sentinel(tokenizer):
@@ -88,6 +97,64 @@ def test_decoding_parameters_are_the_preregistered_ones():
         "min_p": 0.0,
         "max_new_tokens": 512,
     }
+
+
+# --- how a forward pass is seeded ------------------------------------------
+
+
+def test_a_batch_seed_is_fixed_by_the_seed_and_the_prompts():
+    """Rows of one batch share it, so it must not depend on anything else."""
+    assert qwen.batch_seed(1, ["a", "b"]) == qwen.batch_seed(1, ["a", "b"])
+
+
+@pytest.mark.parametrize(
+    "seed, prompts",
+    [
+        pytest.param(2, ["a", "b"], id="different-seed"),
+        pytest.param(1, ["a", "c"], id="different-prompt"),
+        pytest.param(1, ["b", "a"], id="different-order"),
+        pytest.param(1, ["a", "b", "c"], id="different-width"),
+        pytest.param(1, ["a"], id="fewer-prompts"),
+    ],
+)
+def test_any_change_to_a_batch_gives_it_another_seed(seed, prompts):
+    """Otherwise a batch reassembled wrongly would still derive the recorded seed."""
+    assert qwen.batch_seed(seed, prompts) != qwen.batch_seed(1, ["a", "b"])
+
+
+def test_batch_seeds_differ_across_the_batches_of_one_condition():
+    """One seed reused would correlate the sampling noise of every batch in a run."""
+    condition_seed = 20260803
+    batches = [[f"p{i * 4 + j}" for j in range(4)] for i in range(50)]
+
+    seeds = {qwen.batch_seed(condition_seed, batch) for batch in batches}
+
+    assert len(seeds) == len(batches)
+
+
+def test_a_batch_seed_fits_what_torch_accepts():
+    """torch.manual_seed takes an unsigned 64-bit value; this is not testable on GPU."""
+    seeds = [qwen.batch_seed(s, [f"p{s}"]) for s in range(500)]
+
+    assert all(0 <= seed <= 0xFFFFFFFFFFFFFFFF for seed in seeds)
+
+
+def test_prompts_cannot_be_reshuffled_into_the_same_seed():
+    """A separator keeps the joined payload from being ambiguous."""
+    assert qwen.batch_seed(1, ["ab", "c"]) != qwen.batch_seed(1, ["a", "bc"])
+
+
+def test_the_forward_pass_seeds_from_the_derived_value(fake_torch):
+    """Every other test replaces generate_prompts, so only this one reaches it."""
+    with pytest.raises(fake_torch.Stop):
+        qwen.generate_prompts(
+            SimpleNamespace(device="cpu"),
+            lambda prompts, **kwargs: _Encoded(),
+            ["a", "b"],
+            seed=1,
+        )
+
+    assert fake_torch.seeds == [qwen.batch_seed(1, ["a", "b"])]
 
 
 @pytest.mark.parametrize("function", [qwen.generate, qwen.generate_batch])

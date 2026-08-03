@@ -9,7 +9,7 @@ import threading
 
 import anyio
 import pytest
-from generation.qwen import DECODING, Continuation
+from generation.qwen import DECODING, Continuation, batch_seed
 from harness.batching import BATCH, IN_FLIGHT, BatchGenerator, _Batch
 
 
@@ -81,8 +81,10 @@ def test_a_full_batch_generates_together(monkeypatch):
     rows = anyio.run(submit_all, batcher(size=4), ["p0", "p1", "p2", "p3"])
 
     assert calls == [["p0", "p1", "p2", "p3"]]
-    assert [r.batch_index for r in rows] == [0, 1, 2, 3]
+    assert [r.batch_position for r in rows] == [0, 1, 2, 3]
     assert {r.batch_size for r in rows} == {4}
+    # One forward pass, so one seed across its rows.
+    assert {r.batch_seed for r in rows} == {batch_seed(1, ["p0", "p1", "p2", "p3"])}
 
 
 def test_a_lone_caller_generates_immediately(monkeypatch):
@@ -129,6 +131,9 @@ def test_arrivals_during_a_forward_pass_become_the_next_batch(monkeypatch):
     assert in_flight == [["first"]]
     assert calls == [["first"], ["c", "d", "e", "f", "g", "h"]]
     assert rows["h"].batch_size == 6
+    # Two forward passes under one condition seed, each with its own RNG stream.
+    assert rows["c"].batch_seed == rows["h"].batch_seed
+    assert rows["first"].batch_seed != rows["c"].batch_seed
 
 
 def test_a_batch_never_exceeds_the_size_cap(monkeypatch):

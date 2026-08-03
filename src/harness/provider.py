@@ -118,9 +118,9 @@ class QwenLocalAPI(ModelAPI):
             "thinking_leak": contains_thinking(row.raw_continuation),
             "prefill": prefill,
             "seed": seed,
-            # Composition is arrival-dependent, so it is recorded, not replayable.
+            "batch_seed": row.batch_seed,
+            "batch_position": row.batch_position,
             "batch_size": row.batch_size,
-            "batch_index": row.batch_index,
         }
         return output, ModelCall.create(
             request={

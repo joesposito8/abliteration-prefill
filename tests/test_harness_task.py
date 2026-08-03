@@ -17,11 +17,11 @@ from inspect_ai.model import GenerateConfig
 SEED = 20260803
 
 
-def condition() -> Condition:
+def condition(log_root: Path = Path("/tmp/unused")) -> Condition:
     return Condition(
         id="layer_22",
         seed=SEED,
-        log_root=Path("/tmp/unused"),
+        log_root=log_root,
         layer=22,
         prompt_set="pilot",
     )
@@ -33,12 +33,13 @@ def tiny() -> MemoryDataset:
 
 
 def run(prefills, tmp_path, **eval_kwargs):
-    dataset = build_dataset(condition(), prefills)
+    """Routed through ``Condition.log_dir``, so the driver's own call site is covered."""
+    c = condition(tmp_path)
     return eval(
-        refusal_unlock(dataset, seed=SEED, layer=22),
+        refusal_unlock(build_dataset(c, prefills), seed=SEED, layer=22),
         model="mockllm/model",
         sample_id=["005/none"],
-        log_dir=str(tmp_path),
+        log_dir=c.log_dir,
         score=False,
         **eval_kwargs,
     )[0]

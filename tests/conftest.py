@@ -1,10 +1,12 @@
 """Shared doubles for the harness tests.
 
-Only what cannot run locally is faked: a tokenizer's chat template and a batched
-forward pass.
+Only what cannot run locally is faked: a tokenizer's chat template, a batched forward
+pass, and torch itself.
 """
 
 from __future__ import annotations
+
+import sys
 
 import pytest
 from generation.qwen import DECODING, THINKING_SENTINEL, Continuation
@@ -63,6 +65,28 @@ def fake_generate_prompts(monkeypatch):
 def frozen_config_kwargs() -> dict:
     """The task's own mapping, so a test config cannot drift from a real one."""
     return decoding_kwargs()
+
+
+class FakeTorch:
+    """Enough torch for ``generate_prompts`` to reach ``manual_seed`` and no further."""
+
+    class Stop(Exception):
+        """Everything past the seeding call needs real tensors."""
+
+    def __init__(self) -> None:
+        self.seeds: list[int] = []
+
+    def manual_seed(self, value: int) -> None:
+        self.seeds.append(value)
+        raise self.Stop
+
+
+@pytest.fixture
+def fake_torch(monkeypatch) -> FakeTorch:
+    """Stands in front of the ``import torch`` inside the forward pass."""
+    torch = FakeTorch()
+    monkeypatch.setitem(sys.modules, "torch", torch)
+    return torch
 
 
 @pytest.fixture

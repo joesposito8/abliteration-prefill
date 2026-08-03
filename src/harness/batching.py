@@ -2,7 +2,12 @@
 
 A batch is whatever accumulated while the previous one held the GPU. Rows need
 nothing in common, since left padding absorbs the length differences, so composition
-is arrival-dependent and the seed characterises a batch rather than a row.
+is arrival-dependent.
+
+Sampling still draws for the whole batch from one stream, so a row's text depends on
+the batch it landed in. The stream's seed is derived from that batch's own prompts,
+which is what lets a log record composition rather than merely assert it: rows sharing
+a forward pass carry the same ``batch_seed``, and it regenerates them.
 """
 
 from __future__ import annotations
@@ -11,7 +16,7 @@ from dataclasses import asdict, dataclass, field
 
 import anyio
 import anyio.lowlevel
-from generation.qwen import Continuation, generate_prompts
+from generation.qwen import Continuation, batch_seed, generate_prompts
 
 # A memory bound: the KV cache for this many 512-token sequences must fit alongside
 # the weights.
@@ -27,8 +32,9 @@ class Row(Continuation):
     """One member's share of a completed batch."""
 
     seconds: float
+    batch_seed: int
+    batch_position: int
     batch_size: int
-    batch_index: int
 
 
 @dataclass
@@ -65,8 +71,9 @@ class BatchGenerator:
         return Row(
             **asdict(batch.result[index]),
             seconds=batch.seconds,
+            batch_seed=batch_seed(batch.seed, batch.prompts),
+            batch_position=index,
             batch_size=len(batch.prompts),
-            batch_index=index,
         )
 
     def _join(self, prompt: str, seed: int) -> tuple[_Batch, int]:

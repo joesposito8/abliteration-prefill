@@ -30,6 +30,6 @@ class Condition:
         return f"{PROVIDER}/{self.id}"
 
     @property
-    def log_dir(self) -> Path:
-        """Each ``eval()`` writes a new file here, so a resumed condition is several."""
-        return self.log_root / self.id
+    def log_dir(self) -> str:
+        """Where the logs go, as the ``str`` every Inspect entry point takes."""
+        return str(self.log_root / self.id)

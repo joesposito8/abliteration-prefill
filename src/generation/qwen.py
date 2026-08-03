@@ -18,11 +18,12 @@ top-p 0.95 (Qwen's thinking-mode recommendation). The study is preregistered on
 inheriting the model's defaults would silently change the sampled distribution. The
 length cap travels with them in ``DECODING``, since truncation changes the text too.
 
-Seeding. ``generate`` produces exactly one generation from one seed, because a seed is
-only a reproducibility handle if replaying it reproduces that specific text. Batched
-sampling consumes a single RNG stream across the whole batch, so a per-row seed would
-be a lie; ``generate_batch`` returns rows that are reproducible only by replaying
-the identical batch, and says so.
+Seeding. Batched sampling draws for every row from one RNG stream, so a row's text
+depends on which prompts shared its forward pass. That stream is seeded by
+``batch_seed`` from the caller's seed and the batch's exact prompts, so each batch runs
+under its own stream and any batch can be regenerated from what a log already records.
+``generate`` is a one-row batch, so a single generation stays reproducible from its seed
+and message alone.
 
 Note for weight-editing callers: batched work here uses left padding, which is what
 makes index -1 the last real token. Anything collecting last-token hidden states must
@@ -31,6 +32,7 @@ do the same, or it will average padding positions into the result.
 
 from __future__ import annotations
 
+import hashlib
 import time
 from dataclasses import dataclass, replace
 from types import MappingProxyType
@@ -83,6 +85,12 @@ class Continuation:
     raw_continuation: str  # control tokens left in, for leak checks
     prompt_tokens: int  # the row's own length, not the padded batch width
     new_tokens: int  # cut at the pad token
+
+
+def batch_seed(seed: int, prompts: list[str]) -> int:
+    """The RNG seed for one forward pass, from ``seed`` and the batch's exact prompts."""
+    payload = "\0".join([str(seed), *prompts]).encode()
+    return int.from_bytes(hashlib.sha256(payload).digest()[:8], "big")
 
 
 def contains_thinking(text: str) -> bool:
@@ -233,7 +241,7 @@ def generate_prompts(
     ).to(model.device)
     padded_width = encoded.input_ids.shape[1]
 
-    torch.manual_seed(seed)
+    torch.manual_seed(batch_seed(seed, prompts))
     start = time.perf_counter()
     with torch.inference_mode():
         outputs = model.generate(**encoded, **decoding)

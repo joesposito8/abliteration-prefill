@@ -50,9 +50,13 @@ gens, seconds = generate_batch(model, tokenizer, [...], seed=1)   # one RNG stre
 ```
 
 `generate` produces one `Generation` from one seed, so replaying the seed reproduces
-that text. `generate_batch` shares a single RNG stream across the batch, so a row is
-reproducible only by replaying the identical batch — composition has to be recorded,
-not assumed.
+that text. `generate_batch` shares a single RNG stream across the batch, so a row's text
+depends on which prompts shared its forward pass. That stream is seeded by
+`batch_seed(seed, prompts)` rather than by `seed` itself: each batch therefore samples
+independently of every other, and the derived value doubles as the batch's identity —
+rows generated together carry the same one, and re-deriving it from a prompt list that
+was reassembled wrongly lands elsewhere, so a bad reconstruction cannot pass for a good
+one.
 
 A `Generation` carries `output` (prefill + continuation, the form `grade_stripped`
 expects), `continuation` (model tokens, special tokens stripped), and
