@@ -67,7 +67,6 @@ class Generation:
     seed: int
     prompt_tokens: int
     new_tokens: int
-    max_new_tokens: int
     seconds: float | None = None  # None for batch rows, which share one wall clock
 
     @property
@@ -209,7 +208,6 @@ def generate_batch(
             seed=seed,
             prompt_tokens=row.prompt_tokens,
             new_tokens=row.new_tokens,
-            max_new_tokens=decoding["max_new_tokens"],
         )
         for message, row in zip(messages, continuations, strict=True)
     ], batch_seconds
