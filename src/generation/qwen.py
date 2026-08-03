@@ -175,6 +175,8 @@ def generate(
     generations, seconds = generate_batch(
         model, tokenizer, [message], seed=seed, prefill=prefill, decoding=decoding
     )
+    # Batch rows leave ``seconds`` unset because they share one clock; with a single
+    # row the batch's duration is that row's own.
     return replace(generations[0], seconds=seconds)
 
 
