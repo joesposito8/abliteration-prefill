@@ -102,15 +102,18 @@ class QwenLocalAPI(ModelAPI):
             )
 
         prompt = build_prompt(self.tokenizer, message, prefill)
-        row = await self._batcher.submit(prompt, seed)
+        request = {"prompt": prompt, "prefill": prefill, "seed": seed, **DECODING}
+
+        try:
+            row = await self._batcher.submit(prompt, seed)
+        except Exception as exc:
+            return exc, ModelCall.create(request=request, response={})
 
         output = ModelOutput.from_content(
             model=self.model_name,
             content=row.continuation,
             stop_reason=(
-                "max_tokens"
-                if row.new_tokens >= DECODING["max_new_tokens"]
-                else "stop"
+                "max_tokens" if row.new_tokens >= DECODING["max_new_tokens"] else "stop"
             ),
         )
         output.usage = ModelUsage(
@@ -133,12 +136,7 @@ class QwenLocalAPI(ModelAPI):
             "batch_size": row.batch_size,
         }
         return output, ModelCall.create(
-            request={
-                "prompt": prompt,
-                "prefill": prefill,
-                "seed": seed,
-                **DECODING,
-            },
+            request=request,
             response={
                 "continuation": row.continuation,
                 "new_tokens": row.new_tokens,

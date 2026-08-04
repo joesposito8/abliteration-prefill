@@ -72,9 +72,7 @@ def test_a_misspelled_model_arg_is_refused(tokenizer):
 def test_generate_refuses_when_weightless():
     api = build()
     with pytest.raises(RuntimeError, match="holds no live module"):
-        anyio.run(
-            generate, api, [ChatMessageUser(content="hi")], config()
-        )
+        anyio.run(generate, api, [ChatMessageUser(content="hi")], config())
 
 
 def test_a_broken_chat_template_fails_at_construction(tokenizer):
@@ -85,7 +83,9 @@ def test_a_broken_chat_template_fails_at_construction(tokenizer):
 
 def test_the_entry_point_registers_the_provider_and_defers_torch():
     """Nothing here imports `harness._registry`; Inspect loads it via the entry point."""
-    model = get_model("qwen-local/base", config=GenerateConfig(max_connections=IN_FLIGHT))
+    model = get_model(
+        "qwen-local/base", config=GenerateConfig(max_connections=IN_FLIGHT)
+    )
     assert isinstance(model.api, QwenLocalAPI)
     assert model.api.max_connections() == IN_FLIGHT
 
@@ -93,13 +93,9 @@ def test_the_entry_point_registers_the_provider_and_defers_torch():
 # --- the frozen decoding parameters ----------------------------------------
 
 
-def test_accepts_a_config_that_matches_the_frozen_set(
-    tokenizer, fake_generate_prompts
-):
+def test_accepts_a_config_that_matches_the_frozen_set(tokenizer, fake_generate_prompts):
     api = build(tokenizer=tokenizer, module=object())
-    output, _ = anyio.run(
-        generate, api, [ChatMessageUser(content="q")], config()
-    )
+    output, _ = anyio.run(generate, api, [ChatMessageUser(content="q")], config())
     assert output.completion
 
 
@@ -111,7 +107,9 @@ def test_accepts_a_config_that_matches_the_frozen_set(
         pytest.param(
             {"extra_body": {"min_p": 0.4, "do_sample": True}}, id="extra-body-override"
         ),
-        pytest.param({"extra_body": {"do_sample": True}}, id="extra-body-missing-min_p"),
+        pytest.param(
+            {"extra_body": {"do_sample": True}}, id="extra-body-missing-min_p"
+        ),
         pytest.param({"extra_body": None}, id="extra-body-absent"),
         pytest.param({"max_tokens": 256}, id="length-cap-override"),
         # Recorded in the log header, then dropped on the way to the GPU.
@@ -170,9 +168,7 @@ def test_a_seed_must_be_present(tokenizer, fake_generate_prompts):
         )
 
 
-def test_any_seed_value_is_accepted(
-    tokenizer, fake_generate_prompts
-):
+def test_any_seed_value_is_accepted(tokenizer, fake_generate_prompts):
     """The provider must stay ignorant of how seeds are derived."""
     api = build(tokenizer=tokenizer, module=object())
     anyio.run(
@@ -189,7 +185,10 @@ def test_any_seed_value_is_accepted(
 
 def test_a_trailing_assistant_message_is_the_prefill():
     message, prefill = split_prefill(
-        [ChatMessageUser(content="q"), ChatMessageAssistant(content="Sure, here's how:")]
+        [
+            ChatMessageUser(content="q"),
+            ChatMessageAssistant(content="Sure, here's how:"),
+        ]
     )
     assert (message, prefill) == ("q", "Sure, here's how:")
 
@@ -202,7 +201,8 @@ def test_no_trailing_assistant_message_means_no_prefill():
     "messages",
     [
         pytest.param(
-            [ChatMessageUser(content="a"), ChatMessageUser(content="b")], id="multi-turn"
+            [ChatMessageUser(content="a"), ChatMessageUser(content="b")],
+            id="multi-turn",
         ),
         pytest.param(
             [ChatMessageSystem(content="be helpful"), ChatMessageUser(content="q")],
@@ -214,6 +214,23 @@ def test_anything_but_one_user_turn_is_refused(messages):
     """Only the user turn is rendered, so the rest would vanish without a word."""
     with pytest.raises(ValueError, match="single user message"):
         split_prefill(messages)
+
+
+def test_a_failed_forward_pass_still_reports_the_prompt(monkeypatch, tokenizer):
+    """Inspect logs a raised error with no request at all, and one failed pass fails
+    every member of its batch."""
+
+    def boom(model, tok, prompts, *, seed):
+        raise RuntimeError("CUDA out of memory")
+
+    monkeypatch.setattr("harness.batching.generate_prompts", boom)
+    api = build(tokenizer=tokenizer, module=object())
+
+    output, call = anyio.run(generate, api, [ChatMessageUser(content="q")], config())
+
+    assert isinstance(output, RuntimeError)
+    assert "q" in call.request["prompt"]
+    assert call.request["seed"] == SEED
 
 
 def test_completion_is_the_continuation_and_response_is_the_whole_turn(
@@ -270,9 +287,7 @@ def test_metadata_carries_raw_continuation_and_the_pad_cut_token_count(
 ):
     """Neither survives elsewhere: completion is cleaned, and usage counts padding."""
     api = build(tokenizer=tokenizer, module=object())
-    output, _ = anyio.run(
-        generate, api, [ChatMessageUser(content="q")], config()
-    )
+    output, _ = anyio.run(generate, api, [ChatMessageUser(content="q")], config())
     assert output.metadata["raw_continuation"].endswith("<|im_end|>")
     assert output.metadata["new_tokens"] == 7
     assert output.metadata["prompt_tokens"] == 11
@@ -293,15 +308,11 @@ def test_a_thinking_leak_is_flagged(tokenizer, monkeypatch):
 
     monkeypatch.setattr("harness.batching.generate_prompts", leaky)
     api = build(tokenizer=tokenizer, module=object())
-    output, _ = anyio.run(
-        generate, api, [ChatMessageUser(content="q")], config()
-    )
+    output, _ = anyio.run(generate, api, [ChatMessageUser(content="q")], config())
     assert output.metadata["thinking_leak"] is True
 
 
-def test_truncation_shows_up_as_a_stop_reason(
-    tokenizer, monkeypatch
-):
+def test_truncation_shows_up_as_a_stop_reason(tokenizer, monkeypatch):
     def truncated(model, tok, prompts, *, seed):
         return [
             Continuation(
@@ -314,15 +325,11 @@ def test_truncation_shows_up_as_a_stop_reason(
 
     monkeypatch.setattr("harness.batching.generate_prompts", truncated)
     api = build(tokenizer=tokenizer, module=object())
-    output, _ = anyio.run(
-        generate, api, [ChatMessageUser(content="q")], config()
-    )
+    output, _ = anyio.run(generate, api, [ChatMessageUser(content="q")], config())
     assert output.stop_reason == "max_tokens"
 
 
-def test_the_log_records_a_null_module(
-    tmp_path, tokenizer, fake_generate_prompts
-):
+def test_the_log_records_a_null_module(tmp_path, tokenizer, fake_generate_prompts):
     """A serializer added for the module would break this silently."""
     log = run_eval(tmp_path, tokenizer)
 
@@ -363,9 +370,7 @@ def test_an_eval_kwarg_beats_the_task_config_and_the_provider_catches_it(
     assert log.plan.config.temperature == 0.9
 
 
-def test_model_call_records_the_rendered_prompt(
-    tokenizer, fake_generate_prompts
-):
+def test_model_call_records_the_rendered_prompt(tokenizer, fake_generate_prompts):
     """The sentinel is what makes a prefill a continuation, so record it."""
     from generation.qwen import THINKING_SENTINEL
 
