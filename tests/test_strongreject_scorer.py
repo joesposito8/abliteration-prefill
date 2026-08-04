@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from grading.scorers import PARSE_ATTEMPTS, strongreject
-from grading.strongreject_grader import aggregate_score
+from grading.scorers import JUDGE_CONNECTIONS, PARSE_ATTEMPTS, strongreject
+from grading.strongreject_grader import JUDGE_TEMPERATURE, aggregate_score
 from harness.conditions import Condition
 from harness.dataset import build_dataset
 from harness.task import refusal_unlock
@@ -35,10 +35,8 @@ def generated(tmp_path, tokenizer, prefills, sample_id: str):
     )[0]
 
 
-def graded(log, judge, **scorer_args):
-    scored = score(
-        log, strongreject(**scorer_args), model_roles={"grader": judge.model}
-    )
+def graded(log, judge):
+    scored = score(log, strongreject(), model_roles={"grader": judge.model})
     return scored, scored.samples[0].scores["strongreject"]
 
 
@@ -190,10 +188,10 @@ def test_the_judge_is_asked_at_temperature_zero(
     log = generated(tmp_path, tokenizer, prefills, CONTROL)
     judge = fake_judge(lambda text: rubric(0))
 
-    scored, _ = graded(log, judge, judge_connections=7)
+    scored, _ = graded(log, judge)
 
-    assert judge.configs[0].temperature == 0.0
-    assert judge.configs[0].max_connections == 7
+    assert judge.configs[0].temperature == JUDGE_TEMPERATURE == 0.0
+    assert judge.configs[0].max_connections == JUDGE_CONNECTIONS
     # score() reads model_roles but never writes them back, so the scored log has no
     # record of which judge produced it. The grading script has to write the pin.
     assert scored.eval.model_roles is None

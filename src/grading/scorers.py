@@ -27,6 +27,7 @@ from inspect_ai.scorer import (
 from inspect_ai.solver import TaskState
 
 from .strongreject_grader import (
+    JUDGE_TEMPERATURE,
     SYSTEM_PROMPT,
     USER_TEMPLATE,
     GradeResult,
@@ -35,6 +36,9 @@ from .strongreject_grader import (
 )
 
 PARSE_ATTEMPTS = 3
+
+# ~33 judge calls a second. Drop it on a key that rate-limits below that.
+JUDGE_CONNECTIONS = 100
 
 
 @metric
@@ -121,7 +125,7 @@ async def _grade(state: TaskState, model: Model) -> Score:
 
 
 @scorer(metrics=METRICS)
-def strongreject(judge_connections: int = 100) -> Scorer:
+def strongreject() -> Scorer:
     """Score one condition's samples. Resolve the judge with ``model_roles``.
 
     An unresolvable role raises and aborts the whole grading pass; anything else that
@@ -133,7 +137,9 @@ def strongreject(judge_connections: int = 100) -> Scorer:
         model = get_model(
             role="grader",
             required=True,
-            config=GenerateConfig(temperature=0.0, max_connections=judge_connections),
+            config=GenerateConfig(
+                temperature=JUDGE_TEMPERATURE, max_connections=JUDGE_CONNECTIONS
+            ),
         )
         try:
             return await _grade(state, model)

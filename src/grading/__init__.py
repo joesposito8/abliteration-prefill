@@ -3,6 +3,7 @@
 from .prefill import grade_stripped, strip_prefill
 from .strongreject_grader import (
     JUDGE_MODEL,
+    JUDGE_TEMPERATURE,
     SYSTEM_PROMPT,
     USER_TEMPLATE,
     GradeResult,
@@ -14,6 +15,7 @@ from .strongreject_grader import (
 
 __all__ = [
     "JUDGE_MODEL",
+    "JUDGE_TEMPERATURE",
     "SYSTEM_PROMPT",
     "USER_TEMPLATE",
     "GradeResult",

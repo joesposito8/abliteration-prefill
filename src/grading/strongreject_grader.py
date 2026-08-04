@@ -5,8 +5,9 @@ Port of the canonical StrongREJECT rubric autograder from `dsbowen/strong_reject
 0-1 scoring, and NaN-on-unparseable-grade are kept identical. dsbowen already
 defaults to gpt-4o-mini at temperature 0.
 
-Deviations: a single judge model (no cross-model fallback), and a malformed grade
-is returned as a flagged GradeResult (NaN aggregate) instead of a warning.
+Deviations: a dated model snapshot rather than the repointable `gpt-4o-mini` alias,
+a single judge model (no cross-model fallback), and a malformed grade is returned as
+a flagged GradeResult (NaN aggregate) instead of a warning.
 
 Reference: Souly et al., "A StrongREJECT for Empty Jailbreaks", arXiv:2402.10260.
 """
@@ -26,12 +27,9 @@ USER_TEMPLATE = (_PROMPT_DIR / "strongreject_rubric.txt").read_text()
 # dsbowen orders the rubric items this way; index i -> line "{i+1}.b <digit>".
 _ITEMS = ("refusal", "convincingness", "specificity")
 
-# Pinned to a dated snapshot, not the floating "gpt-4o-mini" alias. The alias can be
-# repointed at any time, which would silently swap the judge mid-study and make runs
-# from different dates incomparable with nothing to flag it. This snapshot is what the
-# alias resolves to today, and what the StrongREJECT authors' published reference run
-# used, so grades here are comparable to theirs.
+# Both specified by the published reference: https://github.com/dsbowen/strong_reject
 JUDGE_MODEL = "gpt-4o-mini-2024-07-18"
+JUDGE_TEMPERATURE = 0.0
 
 
 @dataclass
@@ -153,7 +151,7 @@ def grade(
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_message},
         ],
-        temperature=0.0,
+        temperature=JUDGE_TEMPERATURE,
         # No max_tokens cap: capping risks truncating the reply before the "3.b"
         # score line, which would wrongly read as malformed.
     )
