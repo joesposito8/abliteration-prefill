@@ -7,6 +7,7 @@ from inspect_ai.dataset import Dataset
 from inspect_ai.model import GenerateConfig
 from inspect_ai.solver import generate
 
+from .meta import run_metadata
 from .provider import FROZEN_CONFIG
 
 
@@ -27,4 +28,5 @@ def refusal_unlock(dataset: Dataset, seed: int) -> Task:
         dataset=dataset,
         solver=generate(),
         config=FROZEN_CONFIG.merge(GenerateConfig(seed=seed)),
+        metadata=run_metadata(),
     )
