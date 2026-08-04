@@ -2,34 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from inspect_ai import Task, task
 from inspect_ai.dataset import Dataset
 from inspect_ai.model import GenerateConfig
 from inspect_ai.solver import generate
 
-from generation.qwen import DECODING
-
 from .batching import IN_FLIGHT
-
-
-def decoding_kwargs() -> dict[str, Any]:
-    """``qwen.DECODING`` as ``GenerateConfig`` keyword arguments.
-
-    ``provider.require_frozen_decoding`` reads the same values back out of a config and
-    is the inverse of this. A change to ``DECODING``'s shape has to move both, so they
-    are written once each and never restated.
-    """
-    return {
-        "temperature": DECODING["temperature"],
-        "top_p": DECODING["top_p"],
-        "top_k": DECODING["top_k"],
-        # GenerateConfig names the length cap differently from transformers.
-        "max_tokens": DECODING["max_new_tokens"],
-        # Neither has a GenerateConfig field, and unknown fields are rejected outright.
-        "extra_body": {"min_p": DECODING["min_p"], "do_sample": DECODING["do_sample"]},
-    }
+from .provider import FROZEN_DECODING
 
 
 @task
@@ -50,7 +29,7 @@ def refusal_unlock(dataset: Dataset, seed: int, layer: int | None = None) -> Tas
     return Task(
         dataset=dataset,
         solver=generate(),
-        config=GenerateConfig(
-            seed=seed, max_connections=IN_FLIGHT, **decoding_kwargs()
+        config=FROZEN_DECODING.merge(
+            GenerateConfig(seed=seed, max_connections=IN_FLIGHT)
         ),
     )

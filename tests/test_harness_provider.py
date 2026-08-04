@@ -6,7 +6,7 @@ import anyio
 import pytest
 from conftest import CONTINUATION
 from generation.qwen import DECODING, Continuation
-from harness.provider import IN_FLIGHT, QwenLocalAPI, split_prefill
+from harness.provider import FROZEN_DECODING, IN_FLIGHT, QwenLocalAPI, split_prefill
 from inspect_ai.model import (
     ChatMessageAssistant,
     ChatMessageSystem,
@@ -24,16 +24,16 @@ def build(tokenizer=None, module=None) -> QwenLocalAPI:
     )
 
 
-def config(frozen_config_kwargs, **overrides) -> GenerateConfig:
-    kwargs = {"seed": SEED, **frozen_config_kwargs, **overrides}
-    return GenerateConfig(**kwargs)
+def config(**overrides) -> GenerateConfig:
+    """model_copy rather than merge, so a test can unset a field as well as change it."""
+    return FROZEN_DECODING.model_copy(update={"seed": SEED, **overrides})
 
 
 async def generate(api: QwenLocalAPI, messages, cfg):
     return await api.generate(messages, tools=[], tool_choice="none", config=cfg)
 
 
-def run_eval(tmp_path, tokenizer, frozen_config_kwargs, **eval_kwargs):
+def run_eval(tmp_path, tokenizer, **eval_kwargs):
     """One sample through the real task/provider stack, returning the written log."""
     from inspect_ai import Task, eval
     from inspect_ai.dataset import MemoryDataset, Sample
@@ -42,7 +42,7 @@ def run_eval(tmp_path, tokenizer, frozen_config_kwargs, **eval_kwargs):
     task = Task(
         dataset=MemoryDataset([Sample(id="000/none", input="q", target="")]),
         solver=generate_solver(),
-        config=GenerateConfig(seed=SEED, **frozen_config_kwargs),
+        config=config(),
     )
     return eval(
         task,
@@ -69,11 +69,11 @@ def test_a_misspelled_model_arg_is_refused(tokenizer):
         get_model("qwen-local/typo-check", toknizer=tokenizer)
 
 
-def test_generate_refuses_when_weightless(frozen_config_kwargs):
+def test_generate_refuses_when_weightless():
     api = build()
     with pytest.raises(RuntimeError, match="holds no live module"):
         anyio.run(
-            generate, api, [ChatMessageUser(content="hi")], config(frozen_config_kwargs)
+            generate, api, [ChatMessageUser(content="hi")], config()
         )
 
 
@@ -94,11 +94,11 @@ def test_the_entry_point_registers_the_provider_and_defers_torch():
 
 
 def test_accepts_a_config_that_matches_the_frozen_set(
-    tokenizer, fake_generate_prompts, frozen_config_kwargs
+    tokenizer, fake_generate_prompts
 ):
     api = build(tokenizer=tokenizer, module=object())
     output, _ = anyio.run(
-        generate, api, [ChatMessageUser(content="q")], config(frozen_config_kwargs)
+        generate, api, [ChatMessageUser(content="q")], config()
     )
     assert output.completion
 
@@ -114,10 +114,22 @@ def test_accepts_a_config_that_matches_the_frozen_set(
         pytest.param({"extra_body": {"do_sample": True}}, id="extra-body-missing-min_p"),
         pytest.param({"extra_body": None}, id="extra-body-absent"),
         pytest.param({"max_tokens": 256}, id="length-cap-override"),
+        # Recorded in the log header, then dropped on the way to the GPU.
+        pytest.param({"stop_seqs": ["\n\n"]}, id="stop-seqs"),
+        pytest.param({"frequency_penalty": 0.5}, id="frequency-penalty"),
+        pytest.param({"presence_penalty": 0.5}, id="presence-penalty"),
+        pytest.param({"logit_bias": {1: 1.0}}, id="logit-bias"),
+        pytest.param({"num_choices": 2}, id="num-choices"),
+        pytest.param({"logprobs": True}, id="logprobs"),
+        pytest.param({"reasoning_tokens": 100}, id="reasoning-tokens"),
+        # Standing bans: stale completions, and a different model generating.
+        pytest.param({"cache": True}, id="cache"),
+        pytest.param({"batch": 8}, id="provider-batch-api"),
+        pytest.param({"fallback_models": ["mockllm/model"]}, id="fallback-model"),
     ],
 )
 def test_rejects_any_drift_from_the_frozen_set(
-    tokenizer, fake_generate_prompts, frozen_config_kwargs, overrides
+    tokenizer, fake_generate_prompts, overrides
 ):
     api = build(tokenizer=tokenizer, module=object())
     with pytest.raises(ValueError, match="frozen decoding parameters"):
@@ -125,35 +137,38 @@ def test_rejects_any_drift_from_the_frozen_set(
             generate,
             api,
             [ChatMessageUser(content="q")],
-            config(frozen_config_kwargs, **overrides),
+            config(**overrides),
         )
 
 
-def test_the_comparison_is_against_qwen_decoding_itself(
-    tokenizer, fake_generate_prompts, frozen_config_kwargs, monkeypatch
-):
-    """Were they separate constants, the check could pass while the GPU ran otherwise."""
-    monkeypatch.setattr("generation.qwen.DECODING", {**DECODING, "temperature": 0.123})
-    api = build(tokenizer=tokenizer, module=object())
-    with pytest.raises(ValueError, match="frozen decoding parameters"):
-        anyio.run(
-            generate, api, [ChatMessageUser(content="q")], config(frozen_config_kwargs)
-        )
+def test_every_frozen_parameter_reaches_the_config():
+    """A DECODING value that never reaches the config is neither policed nor logged.
+
+    Equality both ways, so a parameter added to DECODING fails here rather than
+    running on the GPU unrecorded.
+    """
+    assert dict(DECODING) == {
+        "temperature": FROZEN_DECODING.temperature,
+        "top_p": FROZEN_DECODING.top_p,
+        "top_k": FROZEN_DECODING.top_k,
+        "max_new_tokens": FROZEN_DECODING.max_tokens,
+        **FROZEN_DECODING.extra_body,
+    }
 
 
-def test_a_seed_must_be_present(tokenizer, fake_generate_prompts, frozen_config_kwargs):
+def test_a_seed_must_be_present(tokenizer, fake_generate_prompts):
     api = build(tokenizer=tokenizer, module=object())
     with pytest.raises(ValueError, match="no seed"):
         anyio.run(
             generate,
             api,
             [ChatMessageUser(content="q")],
-            config(frozen_config_kwargs, seed=None),
+            config(seed=None),
         )
 
 
 def test_any_seed_value_is_accepted(
-    tokenizer, fake_generate_prompts, frozen_config_kwargs
+    tokenizer, fake_generate_prompts
 ):
     """The provider must stay ignorant of how seeds are derived."""
     api = build(tokenizer=tokenizer, module=object())
@@ -161,7 +176,7 @@ def test_any_seed_value_is_accepted(
         generate,
         api,
         [ChatMessageUser(content="q")],
-        config(frozen_config_kwargs, seed=7),
+        config(seed=7),
     )
     assert fake_generate_prompts[0]["seed"] == 7
 
@@ -199,7 +214,7 @@ def test_anything_but_one_user_turn_is_refused(messages):
 
 
 def test_completion_is_prefill_plus_continuation(
-    tokenizer, fake_generate_prompts, frozen_config_kwargs
+    tokenizer, fake_generate_prompts
 ):
     """The scorer strips the prefill back off, so it must be a clean prefix."""
     prefill = "Sure, here's how:"
@@ -208,7 +223,7 @@ def test_completion_is_prefill_plus_continuation(
         generate,
         api,
         [ChatMessageUser(content="q"), ChatMessageAssistant(content=prefill)],
-        config(frozen_config_kwargs),
+        config(),
     )
     assert output.completion == prefill + CONTINUATION
     assert output.metadata["prefill"] == prefill
@@ -218,12 +233,12 @@ def test_completion_is_prefill_plus_continuation(
 
 
 def test_metadata_carries_raw_continuation_and_the_pad_cut_token_count(
-    tokenizer, fake_generate_prompts, frozen_config_kwargs
+    tokenizer, fake_generate_prompts
 ):
     """Neither survives elsewhere: completion is cleaned, and usage counts padding."""
     api = build(tokenizer=tokenizer, module=object())
     output, _ = anyio.run(
-        generate, api, [ChatMessageUser(content="q")], config(frozen_config_kwargs)
+        generate, api, [ChatMessageUser(content="q")], config()
     )
     assert output.metadata["raw_continuation"].endswith("<|im_end|>")
     assert output.metadata["new_tokens"] == 7
@@ -232,7 +247,7 @@ def test_metadata_carries_raw_continuation_and_the_pad_cut_token_count(
     assert output.usage.output_tokens == 7
 
 
-def test_a_thinking_leak_is_flagged(tokenizer, frozen_config_kwargs, monkeypatch):
+def test_a_thinking_leak_is_flagged(tokenizer, monkeypatch):
     """`<think>` survives skip_special_tokens, so a leak is detectable but not visible."""
 
     def leaky(model, tok, prompts, *, seed, decoding=DECODING):
@@ -246,13 +261,13 @@ def test_a_thinking_leak_is_flagged(tokenizer, frozen_config_kwargs, monkeypatch
     monkeypatch.setattr("harness.batching.generate_prompts", leaky)
     api = build(tokenizer=tokenizer, module=object())
     output, _ = anyio.run(
-        generate, api, [ChatMessageUser(content="q")], config(frozen_config_kwargs)
+        generate, api, [ChatMessageUser(content="q")], config()
     )
     assert output.metadata["thinking_leak"] is True
 
 
 def test_truncation_shows_up_as_a_stop_reason(
-    tokenizer, frozen_config_kwargs, monkeypatch
+    tokenizer, monkeypatch
 ):
     def truncated(model, tok, prompts, *, seed, decoding=DECODING):
         return [
@@ -267,16 +282,16 @@ def test_truncation_shows_up_as_a_stop_reason(
     monkeypatch.setattr("harness.batching.generate_prompts", truncated)
     api = build(tokenizer=tokenizer, module=object())
     output, _ = anyio.run(
-        generate, api, [ChatMessageUser(content="q")], config(frozen_config_kwargs)
+        generate, api, [ChatMessageUser(content="q")], config()
     )
     assert output.stop_reason == "max_tokens"
 
 
 def test_the_log_records_a_null_module(
-    tmp_path, tokenizer, fake_generate_prompts, frozen_config_kwargs
+    tmp_path, tokenizer, fake_generate_prompts
 ):
     """A serializer added for the module would break this silently."""
-    log = run_eval(tmp_path, tokenizer, frozen_config_kwargs)
+    log = run_eval(tmp_path, tokenizer)
 
     assert log.status == "success"
     assert log.eval.model_args["module"] is None
@@ -284,14 +299,14 @@ def test_the_log_records_a_null_module(
 
 
 def test_decoding_provenance_lands_in_the_plan_config(
-    tmp_path, tokenizer, fake_generate_prompts, frozen_config_kwargs
+    tmp_path, tokenizer, fake_generate_prompts
 ):
     """`plan.config` is the merged config that ran; `model_generate_config` is not.
 
     The latter holds model-level settings only, and is empty when every value comes
     from the task.
     """
-    log = run_eval(tmp_path, tokenizer, frozen_config_kwargs)
+    log = run_eval(tmp_path, tokenizer)
 
     assert log.plan.config.seed == SEED
     assert log.plan.config.temperature == DECODING["temperature"]
@@ -306,9 +321,9 @@ def test_decoding_provenance_lands_in_the_plan_config(
 
 
 def test_an_eval_kwarg_beats_the_task_config_and_the_provider_catches_it(
-    tmp_path, tokenizer, fake_generate_prompts, frozen_config_kwargs
+    tmp_path, tokenizer, fake_generate_prompts
 ):
-    log = run_eval(tmp_path, tokenizer, frozen_config_kwargs, temperature=0.9)
+    log = run_eval(tmp_path, tokenizer, temperature=0.9)
 
     assert log.status == "error"
     assert "frozen decoding parameters" in str(log.error.message)
@@ -316,7 +331,7 @@ def test_an_eval_kwarg_beats_the_task_config_and_the_provider_catches_it(
 
 
 def test_model_call_records_the_rendered_prompt(
-    tokenizer, fake_generate_prompts, frozen_config_kwargs
+    tokenizer, fake_generate_prompts
 ):
     """The sentinel is what makes a prefill a continuation, so record it."""
     from generation.qwen import THINKING_SENTINEL
@@ -326,7 +341,7 @@ def test_model_call_records_the_rendered_prompt(
         generate,
         api,
         [ChatMessageUser(content="q"), ChatMessageAssistant(content="Sure:")],
-        config(frozen_config_kwargs),
+        config(),
     )
     assert call.request["prompt"].endswith(THINKING_SENTINEL + "Sure:")
     assert call.request["seed"] == SEED

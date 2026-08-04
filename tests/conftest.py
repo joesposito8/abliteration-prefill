@@ -10,7 +10,6 @@ import sys
 
 import pytest
 from generation.qwen import DECODING, THINKING_SENTINEL, Continuation
-from harness.task import decoding_kwargs
 
 CONTINUATION = " a continuation"
 
@@ -59,12 +58,6 @@ def fake_generate_prompts(monkeypatch):
 
     monkeypatch.setattr("harness.batching.generate_prompts", fake)
     return calls
-
-
-@pytest.fixture
-def frozen_config_kwargs() -> dict:
-    """The task's own mapping, so a test config cannot drift from a real one."""
-    return decoding_kwargs()
 
 
 class FakeTorch:

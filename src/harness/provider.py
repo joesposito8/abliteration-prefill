@@ -29,9 +29,26 @@ from inspect_ai.model import (
 )
 from inspect_ai.tool import ToolChoice, ToolInfo
 
-from generation.qwen import build_prompt, contains_thinking
+from generation.qwen import DECODING, build_prompt, contains_thinking
 
 from .batching import IN_FLIGHT, BatchGenerator
+
+FROZEN_DECODING = GenerateConfig(
+    temperature=DECODING["temperature"],
+    top_p=DECODING["top_p"],
+    top_k=DECODING["top_k"],
+    max_tokens=DECODING["max_new_tokens"],
+    extra_body={"min_p": DECODING["min_p"], "do_sample": DECODING["do_sample"]},
+)
+
+MAY_VARY = (
+    "seed",
+    "max_connections",
+    "adaptive_connections",
+    "max_retries",
+    "timeout",
+    "attempt_timeout",
+)
 
 
 class QwenLocalAPI(ModelAPI):
@@ -80,7 +97,7 @@ class QwenLocalAPI(ModelAPI):
         config: GenerateConfig,
     ) -> tuple[ModelOutput | Exception, ModelCall]:
         message, prefill = split_prefill(input)
-        decoding = require_frozen_decoding(config)
+        require_frozen_decoding(config)
         seed = require_seed(config)
 
         if self.module is None or self.tokenizer is None:
@@ -100,7 +117,7 @@ class QwenLocalAPI(ModelAPI):
             content=prefill + row.continuation,
             stop_reason=(
                 "max_tokens"
-                if row.new_tokens >= decoding["max_new_tokens"]
+                if row.new_tokens >= DECODING["max_new_tokens"]
                 else "stop"
             ),
         )
@@ -127,7 +144,7 @@ class QwenLocalAPI(ModelAPI):
                 "prompt": prompt,
                 "prefill": prefill,
                 "seed": seed,
-                **decoding,
+                **DECODING,
             },
             response={
                 "continuation": row.continuation,
@@ -159,41 +176,25 @@ def split_prefill(input: list[ChatMessage]) -> tuple[str, str]:
     return messages[0].text, prefill
 
 
-def require_frozen_decoding(config: GenerateConfig) -> dict[str, Any]:
-    """Check the config's decoding parameters against the frozen set, and return them.
+def require_frozen_decoding(config: GenerateConfig) -> None:
+    """Refuse a config that would generate differently from ``FROZEN_DECODING``.
 
     Checked at the point of use because an ``eval()`` keyword argument wins the config
-    merge, and against ``qwen.DECODING`` because that is the object ``generate_prompts``
-    passes to ``model.generate``.
+    merge. Anything this provider cannot honour is ``None`` on ``FROZEN_DECODING``, so
+    setting it fails here rather than being recorded in the log header and then dropped
+    on the way to the GPU.
     """
-    from generation.qwen import DECODING
-
-    extra = config.extra_body or {}
-    declared = {
-        "temperature": config.temperature,
-        "top_p": config.top_p,
-        "top_k": config.top_k,
-        # GenerateConfig names the length cap differently from transformers.
-        "max_new_tokens": config.max_tokens,
-        # No GenerateConfig field exists for these two, and unknown fields are
-        # rejected, so a task has to pass them in extra_body.
-        "do_sample": extra.get("do_sample"),
-        "min_p": extra.get("min_p"),
-    }
-
-    frozen = dict(DECODING)
-    if declared != frozen:
+    declared = config.model_copy(update=dict.fromkeys(MAY_VARY))
+    if declared != FROZEN_DECODING:
         differing = {
-            name: (declared.get(name), frozen.get(name))
-            for name in frozen.keys() | declared.keys()
-            if declared.get(name) != frozen.get(name)
+            name: (getattr(declared, name), getattr(FROZEN_DECODING, name))
+            for name in GenerateConfig.model_fields
+            if getattr(declared, name) != getattr(FROZEN_DECODING, name)
         }
         raise ValueError(
             "generate config does not match the frozen decoding parameters "
-            f"(name: got, expected): {differing}. min_p and do_sample have no "
-            "GenerateConfig field and must be passed in extra_body."
+            f"(name: got, expected): {differing}"
         )
-    return declared
 
 
 def require_seed(config: GenerateConfig) -> int:

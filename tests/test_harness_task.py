@@ -9,10 +9,9 @@ from harness.batching import BATCH, IN_FLIGHT
 from harness.conditions import Condition
 from harness.dataset import build_dataset
 from harness.provider import require_frozen_decoding
-from harness.task import decoding_kwargs, refusal_unlock
+from harness.task import refusal_unlock
 from inspect_ai import eval
 from inspect_ai.dataset import MemoryDataset, Sample
-from inspect_ai.model import GenerateConfig
 
 SEED = 20260803
 
@@ -48,11 +47,9 @@ def run(prefills, tmp_path, **eval_kwargs):
 # --- the decoding mapping is written once ----------------------------------
 
 
-def test_the_provider_check_is_the_inverse_of_the_task_builder():
-    """Independent copies would let the suite pass while every eval was rejected."""
-    config = GenerateConfig(seed=SEED, **decoding_kwargs())
-
-    assert require_frozen_decoding(config) == dict(DECODING)
+def test_the_config_the_task_builds_passes_the_provider_check():
+    """Otherwise the suite passes while every real eval is rejected at generation."""
+    require_frozen_decoding(refusal_unlock(tiny(), seed=SEED).config)
 
 
 def test_the_config_carries_the_whole_frozen_set():
