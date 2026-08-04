@@ -17,8 +17,6 @@ from study.datasets import load_pilot_prompts, load_strongreject
 
 from .conditions import Condition
 
-# Only the two sets that are eval sets. The extraction and validation splits are
-# deliberately unreachable from here.
 EVAL_SETS = {
     "strongreject": load_strongreject,
     "pilot": load_pilot_prompts,

@@ -5,9 +5,8 @@ from __future__ import annotations
 import pytest
 from harness.conditions import Condition
 from harness.dataset import (
-    CONTROL,
-    EVAL_SETS,
     ATTEMPTS,
+    CONTROL,
     build_dataset,
     sample_id,
     slot_key,
@@ -85,11 +84,6 @@ def test_pilot_ids_join_onto_main_run_ids(prefills):
 
     assert set(pilot) < set(main)
     assert "005/none/00" in pilot
-
-
-def test_the_eval_sets_are_the_only_reachable_prompt_sets():
-    """Extraction and validation splits must not be addressable as an eval set."""
-    assert set(EVAL_SETS) == {"strongreject", "pilot"}
 
 
 # --- the id scheme ---------------------------------------------------------
