@@ -20,7 +20,6 @@ class Condition:
 
     id: str
     seed: int
-    log_root: Path
     layer: int | None = None
     prompt_set: str = "strongreject"
     prefilled: bool = False
@@ -30,7 +29,6 @@ class Condition:
         """What ``eval(model=…)`` takes. Neither the provider nor the task parses it."""
         return f"{PROVIDER}/{self.id}"
 
-    @property
-    def log_dir(self) -> str:
+    def log_dir(self, root: Path) -> str:
         """Where the logs go, as the ``str`` every Inspect entry point takes."""
-        return str(self.log_root / self.id)
+        return str(root / self.id)

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 from harness.conditions import Condition
 from harness.dataset import (
@@ -26,7 +24,6 @@ def condition(prompt_set="strongreject", **overrides) -> Condition:
     kwargs = {
         "id": "layer_22",
         "seed": SEED,
-        "log_root": Path("/tmp/unused"),
         "layer": 22,
         "prompt_set": prompt_set,
     }

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 from generation.qwen import DECODING
 from harness.batching import BATCH, IN_FLIGHT
@@ -17,14 +15,8 @@ from inspect_ai.dataset import MemoryDataset, Sample
 SEED = 20260803
 
 
-def condition(log_root: Path = Path("/tmp/unused")) -> Condition:
-    return Condition(
-        id="layer_22",
-        seed=SEED,
-        log_root=log_root,
-        layer=22,
-        prompt_set="pilot",
-    )
+def condition() -> Condition:
+    return Condition(id="layer_22", seed=SEED, layer=22, prompt_set="pilot")
 
 
 def tiny() -> MemoryDataset:
@@ -34,12 +26,12 @@ def tiny() -> MemoryDataset:
 
 def run(prefills, tmp_path, **eval_kwargs):
     """Routed through ``Condition.log_dir``, so the driver's own call site is covered."""
-    c = condition(tmp_path)
+    c = condition()
     return eval(
         refusal_unlock(build_dataset(c, prefills), seed=SEED, layer=22),
         model="mockllm/model",
         sample_id=["005/none/00"],
-        log_dir=c.log_dir,
+        log_dir=c.log_dir(tmp_path),
         score=False,
         **eval_kwargs,
     )[0]
