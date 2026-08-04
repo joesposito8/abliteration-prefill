@@ -33,14 +33,14 @@ async def generate(api: QwenLocalAPI, messages, cfg):
     return await api.generate(messages, tools=[], tool_choice="none", config=cfg)
 
 
-def run_eval(tmp_path, tokenizer, **eval_kwargs):
+def run_eval(tmp_path, tokenizer, sample_input="q", **eval_kwargs):
     """One sample through the real task/provider stack, returning the written log."""
     from inspect_ai import Task, eval
     from inspect_ai.dataset import MemoryDataset, Sample
     from inspect_ai.solver import generate as generate_solver
 
     task = Task(
-        dataset=MemoryDataset([Sample(id="000/none", input="q", target="")]),
+        dataset=MemoryDataset([Sample(id="000/none", input=sample_input, target="")]),
         solver=generate_solver(),
         config=config(),
     )
@@ -213,10 +213,10 @@ def test_anything_but_one_user_turn_is_refused(messages):
         split_prefill(messages)
 
 
-def test_completion_is_prefill_plus_continuation(
+def test_completion_is_the_continuation_and_response_is_the_whole_turn(
     tokenizer, fake_generate_prompts
 ):
-    """The scorer strips the prefill back off, so it must be a clean prefix."""
+    """Inspect appends completion to a conversation already ending with the prefill."""
     prefill = "Sure, here's how:"
     api = build(tokenizer=tokenizer, module=object())
     output, _ = anyio.run(
@@ -225,8 +225,38 @@ def test_completion_is_prefill_plus_continuation(
         [ChatMessageUser(content="q"), ChatMessageAssistant(content=prefill)],
         config(),
     )
-    assert output.completion == prefill + CONTINUATION
+    assert output.completion == CONTINUATION
     assert output.metadata["prefill"] == prefill
+    assert output.metadata["response"] == prefill + CONTINUATION
+
+
+def test_the_transcript_carries_the_prefill_once(
+    tmp_path, tokenizer, fake_generate_prompts
+):
+    """Analysis rebuilds the turn from messages; a doubled prefill is judged twice."""
+    prefill = "Sure, here's how:"
+    log = run_eval(
+        tmp_path,
+        tokenizer,
+        sample_input=[
+            ChatMessageUser(content="q"),
+            ChatMessageAssistant(content=prefill),
+        ],
+    )
+
+    messages = log.samples[0].messages
+    assert [m.role for m in messages] == ["user", "assistant", "assistant"]
+    assert "".join(m.text for m in messages if m.role == "assistant") == (
+        prefill + CONTINUATION
+    )
+
+
+def test_an_unprefilled_response_is_the_completion(tokenizer, fake_generate_prompts):
+    api = build(tokenizer=tokenizer, module=object())
+    output, _ = anyio.run(generate, api, [ChatMessageUser(content="q")], config())
+
+    assert output.completion == CONTINUATION
+    assert output.metadata["response"] == CONTINUATION
 
 
 # --- what the log carries --------------------------------------------------

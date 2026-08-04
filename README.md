@@ -58,10 +58,10 @@ rows generated together carry the same one, and re-deriving it from a prompt lis
 was reassembled wrongly lands elsewhere, so a bad reconstruction cannot pass for a good
 one.
 
-A `Generation` carries `output` (prefill + continuation, the form `grade_stripped`
-expects), `continuation` (model tokens, special tokens stripped), and
-`raw_continuation` (control tokens intact, for leak checks), plus seed and token
-counts. Decoding is fixed in one frozen `DECODING` mapping — temperature 0.7 / top-p
+A `Generation` carries `response` (prefill + continuation, the whole assistant turn and
+the form `grade_stripped` expects), `continuation` (model tokens, special tokens
+stripped), and `raw_continuation` (control tokens intact, for leak checks), plus seed
+and token counts. Decoding is fixed in one frozen `DECODING` mapping — temperature 0.7 / top-p
 0.8 / top-k 20 / min-p 0, capped at 512 new tokens — passed explicitly on every call.
 The model's own config defaults to the thinking-mode values 0.6 / 0.95, which would
 otherwise be inherited silently.

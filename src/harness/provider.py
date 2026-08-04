@@ -112,9 +112,7 @@ class QwenLocalAPI(ModelAPI):
 
         output = ModelOutput.from_content(
             model=self.model_name,
-            # Inspect appends the generated message after a prefill rather than
-            # merging, so the whole assistant turn is assembled here instead.
-            content=prefill + row.continuation,
+            content=row.continuation,
             stop_reason=(
                 "max_tokens"
                 if row.new_tokens >= DECODING["max_new_tokens"]
@@ -134,6 +132,7 @@ class QwenLocalAPI(ModelAPI):
             "prompt_tokens": row.prompt_tokens,
             "thinking_leak": contains_thinking(row.raw_continuation),
             "prefill": prefill,
+            "response": prefill + row.continuation,
             "seed": seed,
             "batch_seed": row.batch_seed,
             "batch_position": row.batch_position,

@@ -63,7 +63,7 @@ class Generation:
 
     message: str
     prefill: str
-    output: str  # prefill + continuation; what grade_stripped expects
+    response: str  # prefill + continuation, the whole assistant turn
     continuation: str  # model-generated text, special tokens stripped
     raw_continuation: str  # same tokens, control tokens left in for leak checks
     seed: int
@@ -212,7 +212,7 @@ def generate_batch(
         Generation(
             message=message,
             prefill=prefill,
-            output=prefill + row.continuation,
+            response=prefill + row.continuation,
             continuation=row.continuation,
             raw_continuation=row.raw_continuation,
             seed=seed,

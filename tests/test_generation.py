@@ -217,7 +217,7 @@ def test_each_row_keeps_its_own_message_and_continuation(monkeypatch):
     )
 
     assert [g.message for g in generations] == messages
-    assert [g.output for g in generations] == ["A:<0>", "A:<1>", "A:<2>"]
+    assert [g.response for g in generations] == ["A:<0>", "A:<1>", "A:<2>"]
     assert all(message in prompt for message, prompt in zip(messages, calls[0]))
 
 
