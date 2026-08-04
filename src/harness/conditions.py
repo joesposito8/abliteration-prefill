@@ -30,5 +30,5 @@ class Condition:
         return f"{PROVIDER}/{self.id}"
 
     def log_dir(self, root: Path) -> str:
-        """Where the logs go, as the ``str`` every Inspect entry point takes."""
-        return str(root / self.id)
+        """Split by prompt set too, or resume reads one as progress on the other."""
+        return str(root / self.id / self.prompt_set)

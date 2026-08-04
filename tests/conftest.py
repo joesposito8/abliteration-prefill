@@ -42,9 +42,16 @@ class FakeGeneratePrompts:
     def __init__(self) -> None:
         self.calls: list[dict] = []
         self.continuation = CONTINUATION
+        self.fail_after: int | None = None
+
+    @property
+    def rows(self) -> int:
+        return sum(len(call["prompts"]) for call in self.calls)
 
     def __call__(self, model, tok, prompts, *, seed):
         self.calls.append({"prompts": list(prompts), "seed": seed})
+        if self.fail_after is not None and len(self.calls) > self.fail_after:
+            raise RuntimeError("CUDA out of memory")
         return [
             Continuation(
                 continuation=self.continuation,
