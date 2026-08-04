@@ -36,28 +36,32 @@ def tokenizer() -> FakeTokenizer:
     return FakeTokenizer()
 
 
-@pytest.fixture
-def fake_generate_prompts(monkeypatch):
-    """Replace the forward pass with a recorder returning real Continuations.
+class FakeGeneratePrompts:
+    """A forward pass that records what it was asked and returns real Continuations."""
 
-    Returns the list of calls, so a test can assert what was asked of the GPU.
-    """
-    calls: list[dict] = []
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+        self.continuation = CONTINUATION
 
-    def fake(model, tok, prompts, *, seed):
-        calls.append({"prompts": list(prompts), "seed": seed})
+    def __call__(self, model, tok, prompts, *, seed):
+        self.calls.append({"prompts": list(prompts), "seed": seed})
         return [
             Continuation(
-                continuation=CONTINUATION,
-                raw_continuation=CONTINUATION + "<|im_end|>",
+                continuation=self.continuation,
+                raw_continuation=self.continuation + "<|im_end|>",
                 prompt_tokens=11,
                 new_tokens=7,
             )
             for _ in prompts
         ], 0.5
 
+
+@pytest.fixture
+def fake_generate_prompts(monkeypatch) -> FakeGeneratePrompts:
+    """Set ``.continuation`` to change what every row comes back with."""
+    fake = FakeGeneratePrompts()
     monkeypatch.setattr("harness.batching.generate_prompts", fake)
-    return calls
+    return fake
 
 
 class FakeTorch:
@@ -94,3 +98,34 @@ class _FakePrefills(dict):
     def __missing__(self, key) -> str:
         prompt_id, slot = key
         return f"[{slot} for {prompt_id}]"
+
+
+class FakeJudge:
+    """A grader model that answers from a rule over the text it was handed.
+
+    Records the text and the resolved config of every call, so a test can assert both
+    what the judge saw and what it would have been asked to do.
+    """
+
+    def __init__(self, reply) -> None:
+        from inspect_ai.model import get_model
+
+        self.reply = reply
+        self.judged: list[str] = []
+        self.configs: list = []
+        self.model = get_model("mockllm/model", custom_outputs=self)
+
+    def __call__(self, input, tools, tool_choice, config):
+        from inspect_ai.model import ModelOutput
+
+        self.judged.append(input[-1].text)
+        self.configs.append(config)
+        return ModelOutput.from_content(
+            model="mockllm", content=self.reply(self.judged[-1])
+        )
+
+
+@pytest.fixture
+def fake_judge():
+    """Stands in for the rubric grader, which is an API call away."""
+    return FakeJudge

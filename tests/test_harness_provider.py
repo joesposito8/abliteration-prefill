@@ -181,7 +181,7 @@ def test_any_seed_value_is_accepted(
         [ChatMessageUser(content="q")],
         config(seed=7),
     )
-    assert fake_generate_prompts[0]["seed"] == 7
+    assert fake_generate_prompts.calls[0]["seed"] == 7
 
 
 # --- prefill ---------------------------------------------------------------
