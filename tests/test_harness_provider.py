@@ -280,7 +280,7 @@ def test_metadata_carries_raw_continuation_and_the_pad_cut_token_count(
 def test_a_thinking_leak_is_flagged(tokenizer, monkeypatch):
     """`<think>` survives skip_special_tokens, so a leak is detectable but not visible."""
 
-    def leaky(model, tok, prompts, *, seed, decoding=DECODING):
+    def leaky(model, tok, prompts, *, seed):
         text = "<think>hmm</think> ok"
         return [
             Continuation(
@@ -299,7 +299,7 @@ def test_a_thinking_leak_is_flagged(tokenizer, monkeypatch):
 def test_truncation_shows_up_as_a_stop_reason(
     tokenizer, monkeypatch
 ):
-    def truncated(model, tok, prompts, *, seed, decoding=DECODING):
+    def truncated(model, tok, prompts, *, seed):
         return [
             Continuation(
                 continuation="cut off",

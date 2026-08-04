@@ -191,7 +191,7 @@ def fake_prompts(monkeypatch, seconds=0.5):
     """Stand in for the forward pass, returning one Continuation per prompt."""
     calls = []
 
-    def fake(model, tok, prompts, *, seed, decoding=qwen.DECODING):
+    def fake(model, tok, prompts, *, seed):
         calls.append(list(prompts))
         return [
             qwen.Continuation(

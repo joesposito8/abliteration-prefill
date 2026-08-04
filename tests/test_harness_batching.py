@@ -27,7 +27,7 @@ def echo(prompts, seconds=0.5):
 
 
 def recording_fake(calls=None, *, fail=None):
-    def fake(model, tok, prompts, *, seed, decoding=DECODING):
+    def fake(model, tok, prompts, *, seed):
         if calls is not None:
             calls.append(list(prompts))
         if fail is not None:
@@ -40,7 +40,7 @@ def recording_fake(calls=None, *, fail=None):
 def blocking_fake(calls, started, release):
     """First call blocks, so later arrivals accumulate behind it."""
 
-    def fake(model, tok, prompts, *, seed, decoding=DECODING):
+    def fake(model, tok, prompts, *, seed):
         calls.append(list(prompts))
         if len(calls) == 1:
             started.set()

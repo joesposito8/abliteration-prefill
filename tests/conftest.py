@@ -44,7 +44,7 @@ def fake_generate_prompts(monkeypatch):
     """
     calls: list[dict] = []
 
-    def fake(model, tok, prompts, *, seed, decoding=DECODING):
+    def fake(model, tok, prompts, *, seed):
         calls.append({"prompts": list(prompts), "seed": seed})
         return [
             Continuation(

@@ -173,7 +173,6 @@ def generate(
     *,
     seed: int,
     prefill: str = "",
-    decoding=DECODING,
 ) -> Generation:
     """Generate one continuation, reproducible from ``seed`` alone.
 
@@ -181,7 +180,7 @@ def generate(
     produced it, so it cannot be omitted.
     """
     generations, seconds = generate_batch(
-        model, tokenizer, [message], seed=seed, prefill=prefill, decoding=decoding
+        model, tokenizer, [message], seed=seed, prefill=prefill
     )
     # Batch rows leave ``seconds`` unset because they share one clock; with a single
     # row the batch's duration is that row's own.
@@ -195,7 +194,6 @@ def generate_batch(
     *,
     seed: int,
     prefill: str = "",
-    decoding=DECODING,
 ) -> tuple[list[Generation], float]:
     """Generate one continuation per message in a single batched call.
 
@@ -206,7 +204,7 @@ def generate_batch(
     """
     prompts = [build_prompt(tokenizer, message, prefill) for message in messages]
     continuations, batch_seconds = generate_prompts(
-        model, tokenizer, prompts, seed=seed, decoding=decoding
+        model, tokenizer, prompts, seed=seed
     )
     return [
         Generation(
@@ -229,7 +227,6 @@ def generate_prompts(
     prompts: list[str],
     *,
     seed: int,
-    decoding=DECODING,
 ) -> tuple[list[Continuation], float]:
     """Run already-rendered prompts through the model in one batched call."""
     import torch
@@ -244,7 +241,7 @@ def generate_prompts(
     torch.manual_seed(batch_seed(seed, prompts))
     start = time.perf_counter()
     with torch.inference_mode():
-        outputs = model.generate(**encoded, **decoding)
+        outputs = model.generate(**encoded, **DECODING)
     batch_seconds = time.perf_counter() - start
 
     # Pull the generated tokens and prompt lengths to the host once, rather than
