@@ -26,6 +26,8 @@ def refusal_unlock(dataset: Dataset, seed: int, layer: int | None = None) -> Tas
     No scorer: generation and grading are separate passes and ``score()`` takes the
     scorer at grading time, so nothing here needs an API key.
     """
+    if isinstance(dataset, str):
+        raise TypeError(f"dataset must be a Dataset, not the name {dataset!r}")
     return Task(
         dataset=dataset,
         solver=generate(),

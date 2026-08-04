@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from generation.qwen import DECODING
 from harness.batching import BATCH, IN_FLIGHT
 from harness.conditions import Condition
@@ -85,6 +86,14 @@ def test_no_batch_api_and_no_cache_are_requested():
 
 
 # --- what the log header records -------------------------------------------
+
+
+def test_rebuilding_the_task_from_its_recorded_args_is_refused(prefills, tmp_path):
+    """eval_retry rebuilds this way, and Task reads a name as one sample per character."""
+    recorded = run(prefills, tmp_path).eval.task_args
+
+    with pytest.raises(TypeError, match="must be a Dataset"):
+        refusal_unlock(**recorded)
 
 
 def test_task_args_name_the_dataset_rather_than_its_contents(prefills, tmp_path):
