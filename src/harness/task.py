@@ -7,8 +7,7 @@ from inspect_ai.dataset import Dataset
 from inspect_ai.model import GenerateConfig
 from inspect_ai.solver import generate
 
-from .batching import IN_FLIGHT
-from .provider import FROZEN_DECODING
+from .provider import FROZEN_CONFIG
 
 
 @task
@@ -31,7 +30,5 @@ def refusal_unlock(dataset: Dataset, seed: int, layer: int | None = None) -> Tas
     return Task(
         dataset=dataset,
         solver=generate(),
-        config=FROZEN_DECODING.merge(
-            GenerateConfig(seed=seed, max_connections=IN_FLIGHT)
-        ),
+        config=FROZEN_CONFIG.merge(GenerateConfig(seed=seed)),
     )

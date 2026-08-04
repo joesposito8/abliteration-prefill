@@ -33,22 +33,16 @@ from generation.qwen import DECODING, build_prompt, contains_thinking
 
 from .batching import IN_FLIGHT, BatchGenerator
 
-FROZEN_DECODING = GenerateConfig(
+FROZEN_CONFIG = GenerateConfig(
     temperature=DECODING["temperature"],
     top_p=DECODING["top_p"],
     top_k=DECODING["top_k"],
     max_tokens=DECODING["max_new_tokens"],
     extra_body={"min_p": DECODING["min_p"], "do_sample": DECODING["do_sample"]},
+    max_connections=IN_FLIGHT,
 )
 
-MAY_VARY = (
-    "seed",
-    "max_connections",
-    "adaptive_connections",
-    "max_retries",
-    "timeout",
-    "attempt_timeout",
-)
+MAY_VARY = ("seed", "max_retries", "timeout", "attempt_timeout")
 
 
 class QwenLocalAPI(ModelAPI):
@@ -97,7 +91,7 @@ class QwenLocalAPI(ModelAPI):
         config: GenerateConfig,
     ) -> tuple[ModelOutput | Exception, ModelCall]:
         message, prefill = split_prefill(input)
-        require_frozen_decoding(config)
+        require_frozen_config(config)
         seed = require_seed(config)
 
         if self.module is None or self.tokenizer is None:
@@ -175,23 +169,23 @@ def split_prefill(input: list[ChatMessage]) -> tuple[str, str]:
     return messages[0].text, prefill
 
 
-def require_frozen_decoding(config: GenerateConfig) -> None:
-    """Refuse a config that would generate differently from ``FROZEN_DECODING``.
+def require_frozen_config(config: GenerateConfig) -> None:
+    """Refuse a config that would generate differently from ``FROZEN_CONFIG``.
 
     Checked at the point of use because an ``eval()`` keyword argument wins the config
-    merge. Anything this provider cannot honour is ``None`` on ``FROZEN_DECODING``, so
+    merge. Anything this provider cannot honour is ``None`` on ``FROZEN_CONFIG``, so
     setting it fails here rather than being recorded in the log header and then dropped
     on the way to the GPU.
     """
     declared = config.model_copy(update=dict.fromkeys(MAY_VARY))
-    if declared != FROZEN_DECODING:
+    if declared != FROZEN_CONFIG:
         differing = {
-            name: (getattr(declared, name), getattr(FROZEN_DECODING, name))
+            name: (getattr(declared, name), getattr(FROZEN_CONFIG, name))
             for name in GenerateConfig.model_fields
-            if getattr(declared, name) != getattr(FROZEN_DECODING, name)
+            if getattr(declared, name) != getattr(FROZEN_CONFIG, name)
         }
         raise ValueError(
-            "generate config does not match the frozen decoding parameters "
+            "generate config does not match the frozen config "
             f"(name: got, expected): {differing}"
         )
 

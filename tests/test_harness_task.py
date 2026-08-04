@@ -7,7 +7,7 @@ from generation.qwen import DECODING
 from harness.batching import BATCH, IN_FLIGHT
 from harness.conditions import Condition
 from harness.dataset import build_dataset
-from harness.provider import require_frozen_decoding
+from harness.provider import require_frozen_config
 from harness.task import refusal_unlock
 from inspect_ai import eval
 from inspect_ai.dataset import MemoryDataset, Sample
@@ -42,7 +42,7 @@ def run(prefills, tmp_path, **eval_kwargs):
 
 def test_the_config_the_task_builds_passes_the_provider_check():
     """Otherwise the suite passes while every real eval is rejected at generation."""
-    require_frozen_decoding(refusal_unlock(tiny(), seed=SEED).config)
+    require_frozen_config(refusal_unlock(tiny(), seed=SEED).config)
 
 
 def test_the_config_carries_the_whole_frozen_set():

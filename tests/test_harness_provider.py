@@ -6,7 +6,7 @@ import anyio
 import pytest
 from conftest import CONTINUATION
 from generation.qwen import DECODING, Continuation
-from harness.provider import FROZEN_DECODING, IN_FLIGHT, QwenLocalAPI, split_prefill
+from harness.provider import FROZEN_CONFIG, IN_FLIGHT, QwenLocalAPI, split_prefill
 from inspect_ai.model import (
     ChatMessageAssistant,
     ChatMessageSystem,
@@ -26,7 +26,7 @@ def build(tokenizer=None, module=None) -> QwenLocalAPI:
 
 def config(**overrides) -> GenerateConfig:
     """model_copy rather than merge, so a test can unset a field as well as change it."""
-    return FROZEN_DECODING.model_copy(update={"seed": SEED, **overrides})
+    return FROZEN_CONFIG.model_copy(update={"seed": SEED, **overrides})
 
 
 async def generate(api: QwenLocalAPI, messages, cfg):
@@ -122,6 +122,9 @@ def test_accepts_a_config_that_matches_the_frozen_set(
         pytest.param({"num_choices": 2}, id="num-choices"),
         pytest.param({"logprobs": True}, id="logprobs"),
         pytest.param({"reasoning_tokens": 100}, id="reasoning-tokens"),
+        # Sets the batch width, so it moves composition and the text with it.
+        pytest.param({"max_connections": 8}, id="pipeline-depth"),
+        pytest.param({"adaptive_connections": True}, id="adaptive-concurrency"),
         # Standing bans: stale completions, and a different model generating.
         pytest.param({"cache": True}, id="cache"),
         pytest.param({"batch": 8}, id="provider-batch-api"),
@@ -132,7 +135,7 @@ def test_rejects_any_drift_from_the_frozen_set(
     tokenizer, fake_generate_prompts, overrides
 ):
     api = build(tokenizer=tokenizer, module=object())
-    with pytest.raises(ValueError, match="frozen decoding parameters"):
+    with pytest.raises(ValueError, match="frozen config"):
         anyio.run(
             generate,
             api,
@@ -148,11 +151,11 @@ def test_every_frozen_parameter_reaches_the_config():
     running on the GPU unrecorded.
     """
     assert dict(DECODING) == {
-        "temperature": FROZEN_DECODING.temperature,
-        "top_p": FROZEN_DECODING.top_p,
-        "top_k": FROZEN_DECODING.top_k,
-        "max_new_tokens": FROZEN_DECODING.max_tokens,
-        **FROZEN_DECODING.extra_body,
+        "temperature": FROZEN_CONFIG.temperature,
+        "top_p": FROZEN_CONFIG.top_p,
+        "top_k": FROZEN_CONFIG.top_k,
+        "max_new_tokens": FROZEN_CONFIG.max_tokens,
+        **FROZEN_CONFIG.extra_body,
     }
 
 
@@ -356,7 +359,7 @@ def test_an_eval_kwarg_beats_the_task_config_and_the_provider_catches_it(
     log = run_eval(tmp_path, tokenizer, temperature=0.9)
 
     assert log.status == "error"
-    assert "frozen decoding parameters" in str(log.error.message)
+    assert "frozen config" in str(log.error.message)
     assert log.plan.config.temperature == 0.9
 
 
