@@ -28,7 +28,7 @@ def run(prefills, tmp_path, **eval_kwargs):
     """Routed through ``Condition.log_dir``, so the driver's own call site is covered."""
     c = condition()
     return eval(
-        refusal_unlock(build_dataset(c, prefills), seed=SEED, layer=22),
+        refusal_unlock(build_dataset(c, prefills), seed=SEED),
         model="mockllm/model",
         sample_id=["005/none/00"],
         log_dir=c.log_dir(tmp_path),
@@ -89,14 +89,10 @@ def test_rebuilding_the_task_from_its_recorded_args_is_refused(prefills, tmp_pat
 
 
 def test_task_args_name_the_dataset_rather_than_its_contents(prefills, tmp_path):
-    """Every parameter is recorded verbatim; the prefills behind it are megabytes.
-
-    ``layer`` is in here because nothing else in the log holds it — the harness never
-    parses a condition id, so the layer is not recoverable from the model name.
-    """
+    """Every parameter is recorded verbatim; the prefills behind it are megabytes."""
     log = run(prefills, tmp_path)
 
-    assert log.eval.task_args == {"dataset": "pilot", "seed": SEED, "layer": 22}
+    assert log.eval.task_args == {"dataset": "pilot", "seed": SEED}
     assert "[system_simulation:0 for 5]" not in repr(log.eval.task_args)
 
 
