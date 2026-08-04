@@ -38,7 +38,7 @@ def run(prefills, tmp_path, **eval_kwargs):
     return eval(
         refusal_unlock(build_dataset(c, prefills), seed=SEED, layer=22),
         model="mockllm/model",
-        sample_id=["005/none"],
+        sample_id=["005/none/00"],
         log_dir=c.log_dir,
         score=False,
         **eval_kwargs,

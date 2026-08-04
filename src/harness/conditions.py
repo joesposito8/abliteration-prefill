@@ -23,6 +23,7 @@ class Condition:
     log_root: Path
     layer: int | None = None
     prompt_set: str = "strongreject"
+    prefilled: bool = False
 
     @property
     def model_name(self) -> str:
