@@ -13,13 +13,24 @@ from collections.abc import Mapping
 from inspect_ai.dataset import MemoryDataset, Sample
 from inspect_ai.model import ChatMessageAssistant, ChatMessageUser
 from prefills import PORTFOLIO
-from study.datasets import load_pilot_prompts, load_strongreject
+from study.datasets import (
+    PILOT_PROMPTS_CSV,
+    STRONGREJECT_CSV,
+    load_pilot_prompts,
+    load_strongreject,
+)
 
 from .conditions import Condition
 
 EVAL_SETS = {
     "strongreject": load_strongreject,
     "pilot": load_pilot_prompts,
+}
+
+# What each loader reads, for the log header to hash.
+EVAL_SET_CSV = {
+    "strongreject": STRONGREJECT_CSV,
+    "pilot": PILOT_PROMPTS_CSV,
 }
 
 CONTROL = "none"

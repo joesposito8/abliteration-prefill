@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 
-import inspect_ai
+import pytest
 from generation.qwen import MODEL_ID, REVISION
 from harness.conditions import Condition
-from harness.dataset import build_dataset
+from harness.dataset import EVAL_SET_CSV, EVAL_SETS, build_dataset
 from harness.meta import PORTFOLIO_MANIFEST_JSON, run_metadata
 from harness.task import refusal_unlock
 from inspect_ai import eval
@@ -31,7 +32,7 @@ def test_the_metadata_reaches_the_written_header(prefills, tmp_path):
     """On the task rather than the eval call, so a driver cannot leave it off."""
     written = read_eval_log(run(prefills, tmp_path).location, header_only=True)
 
-    assert written.eval.metadata == run_metadata()
+    assert written.eval.metadata == run_metadata("pilot")
 
 
 def test_the_weights_the_condition_started_from_are_named(prefills, tmp_path):
@@ -43,18 +44,29 @@ def test_the_weights_the_condition_started_from_are_named(prefills, tmp_path):
     assert log.eval.metadata["target_revision"] == REVISION
 
 
-def test_the_framework_is_located_as_well_as_versioned(prefills, tmp_path):
-    """``packages`` carries the version; an editable checkout shares it."""
-    log = run(prefills, tmp_path)
-
-    assert log.eval.packages["inspect_ai"] == inspect_ai.__version__
-    assert log.eval.metadata["inspect_ai_path"] == inspect_ai.__file__
-
-
-def test_the_frozen_data_is_identified(prefills, tmp_path):
+def test_the_prompts_are_hashed_as_they_were_read(prefills, tmp_path):
     """``eval.dataset`` carries a name and a count, never a content hash."""
-    manifest = json.loads(PORTFOLIO_MANIFEST_JSON.read_text())
     log = run(prefills, tmp_path)
 
-    assert log.eval.metadata["portfolio_sha256"] == manifest["portfolio_sha256"]
-    assert len(log.eval.metadata["freeze_manifest_sha256"]) == 64
+    assert log.eval.dataset.name == "pilot"
+    assert (
+        log.eval.metadata["prompt_set_sha256"]
+        == hashlib.sha256(EVAL_SET_CSV["pilot"].read_bytes()).hexdigest()
+    )
+
+
+def test_the_two_prompt_sets_hash_differently():
+    """A condition run on the pilot must not read as one run on the full set."""
+    assert run_metadata("pilot") != run_metadata("strongreject")
+
+
+@pytest.mark.parametrize("prompt_set", EVAL_SETS)
+def test_every_prompt_set_that_loads_also_hashes(prompt_set):
+    """Two registries keyed the same; adding to one alone fails here."""
+    assert run_metadata(prompt_set)["prompt_set_sha256"]
+
+
+def test_the_slot_contract_the_dataset_was_built_against_is_identified():
+    manifest = json.loads(PORTFOLIO_MANIFEST_JSON.read_text())
+
+    assert run_metadata("pilot")["portfolio_sha256"] == manifest["portfolio_sha256"]

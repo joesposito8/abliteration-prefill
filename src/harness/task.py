@@ -17,7 +17,8 @@ def refusal_unlock(dataset: Dataset, seed: int) -> Task:
 
     The caller builds ``dataset``: every parameter is recorded verbatim in
     ``EvalSpec.task_args``, and a Dataset records as its name where the prefill mapping
-    behind it would record as megabytes of attack text per log.
+    behind it would record as megabytes of attack text per log. That name is the prompt
+    set, which is what the header hashes.
 
     No scorer: generation and grading are separate passes and ``score()`` takes the
     scorer at grading time, so nothing here needs an API key.
@@ -28,5 +29,5 @@ def refusal_unlock(dataset: Dataset, seed: int) -> Task:
         dataset=dataset,
         solver=generate(),
         config=FROZEN_CONFIG.merge(GenerateConfig(seed=seed)),
-        metadata=run_metadata(),
+        metadata=run_metadata(dataset.name),
     )
