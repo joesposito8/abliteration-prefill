@@ -16,7 +16,7 @@ from pathlib import Path
 from generation.qwen import MODEL_ID, REVISION
 from study.datasets import DATA_DIR
 
-from .dataset import EVAL_SET_CSV
+from .dataset import EVAL_SETS
 
 PORTFOLIO_MANIFEST_JSON = DATA_DIR / "portfolio_manifest.json"
 
@@ -31,7 +31,7 @@ def run_metadata(prompt_set: str) -> dict:
         "target_model": MODEL_ID,
         "target_revision": REVISION,
         # The prompts as read, so a CSV that drifted from its manifest is still caught.
-        "prompt_set_sha256": _sha256(EVAL_SET_CSV[prompt_set]),
+        "prompt_set_sha256": _sha256(EVAL_SETS[prompt_set].csv),
         "portfolio_sha256": json.loads(PORTFOLIO_MANIFEST_JSON.read_text())[
             "portfolio_sha256"
         ],

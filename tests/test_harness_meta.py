@@ -5,10 +5,9 @@ from __future__ import annotations
 import hashlib
 import json
 
-import pytest
 from generation.qwen import MODEL_ID, REVISION
 from harness.conditions import Condition
-from harness.dataset import EVAL_SET_CSV, EVAL_SETS, build_dataset
+from harness.dataset import EVAL_SETS, build_dataset
 from harness.meta import PORTFOLIO_MANIFEST_JSON, run_metadata
 from harness.task import refusal_unlock
 from inspect_ai import eval
@@ -51,19 +50,13 @@ def test_the_prompts_are_hashed_as_they_were_read(prefills, tmp_path):
     assert log.eval.dataset.name == "pilot"
     assert (
         log.eval.metadata["prompt_set_sha256"]
-        == hashlib.sha256(EVAL_SET_CSV["pilot"].read_bytes()).hexdigest()
+        == hashlib.sha256(EVAL_SETS["pilot"].csv.read_bytes()).hexdigest()
     )
 
 
 def test_the_two_prompt_sets_hash_differently():
     """A condition run on the pilot must not read as one run on the full set."""
     assert run_metadata("pilot") != run_metadata("strongreject")
-
-
-@pytest.mark.parametrize("prompt_set", EVAL_SETS)
-def test_every_prompt_set_that_loads_also_hashes(prompt_set):
-    """Two registries keyed the same; adding to one alone fails here."""
-    assert run_metadata(prompt_set)["prompt_set_sha256"]
 
 
 def test_the_slot_contract_the_dataset_was_built_against_is_identified():

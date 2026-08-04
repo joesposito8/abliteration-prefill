@@ -8,8 +8,11 @@ rule holds every condition's denominator equal.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from pathlib import Path
 
+import pandas as pd
 from inspect_ai.dataset import MemoryDataset, Sample
 from inspect_ai.model import ChatMessageAssistant, ChatMessageUser
 from prefills import PORTFOLIO
@@ -22,15 +25,16 @@ from study.datasets import (
 
 from .conditions import Condition
 
-EVAL_SETS = {
-    "strongreject": load_strongreject,
-    "pilot": load_pilot_prompts,
-}
 
-# What each loader reads, for the log header to hash.
-EVAL_SET_CSV = {
-    "strongreject": STRONGREJECT_CSV,
-    "pilot": PILOT_PROMPTS_CSV,
+@dataclass(frozen=True)
+class EvalSet:
+    load: Callable[[], pd.DataFrame]
+    csv: Path
+
+
+EVAL_SETS = {
+    "strongreject": EvalSet(load_strongreject, STRONGREJECT_CSV),
+    "pilot": EvalSet(load_pilot_prompts, PILOT_PROMPTS_CSV),
 }
 
 CONTROL = "none"
@@ -68,7 +72,7 @@ def build_dataset(
     The arms are emitted in blocks rather than interleaved, so a batch tends to hold
     prompts of one length and pads less.
     """
-    rows = list(EVAL_SETS[condition.prompt_set]().itertuples())
+    rows = list(EVAL_SETS[condition.prompt_set].load().itertuples())
 
     samples = [
         _sample(condition, row, CONTROL, replicate, prefills)
