@@ -14,6 +14,16 @@ from generation.qwen import DECODING, THINKING_SENTINEL, Continuation
 CONTINUATION = " a continuation"
 
 
+@pytest.fixture(autouse=True)
+def fresh_providers():
+    """``get_model`` memoises on the model name plus the *serialised* model args, and a
+    live module serialises to null — so two tests naming one condition would share the
+    first's provider, still holding the first's module."""
+    from inspect_ai.model._model import _models
+
+    _models.clear()
+
+
 class FakeTokenizer:
     """Renders the shape ``build_prompt`` checks for, honouring ``enable_thinking``."""
 

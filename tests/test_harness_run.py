@@ -1,8 +1,8 @@
-"""Resuming a condition: what an interrupted run leaves behind, and what it costs.
+"""Resuming a condition, and the weights each condition of a sweep generates under.
 
-Every property here belongs to Inspect rather than to us, which is why they are asserted:
-a release that quietly stopped reusing samples would be discovered as a doubled GPU bill
-partway through a metered run.
+Every resume property here belongs to Inspect rather than to us, which is why they are
+asserted: a release that quietly stopped reusing samples would be discovered as a doubled
+GPU bill partway through a metered run.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import pytest
 from harness.batching import BATCH
 from harness.conditions import Condition
 from harness.dataset import build_dataset
-from harness.run import run_condition
+from harness.run import run_condition, run_sweep
 from inspect_ai.log import (
     list_eval_logs,
     read_eval_log,
@@ -152,6 +152,126 @@ def test_exactly_one_log_reports_success(
     run(prefills, tokenizer, tmp_path)
 
     assert sorted(statuses(tmp_path)) == ["error", "success"]
+
+
+# --- which weights each condition of a sweep generates under ---------------
+
+# Indexed by layer, so an edit recorded during generation names the layer that applied it.
+DIRECTIONS = list(range(40))
+
+
+class Weights:
+    """A module whose whole content is the edits currently applied to it."""
+
+    def __init__(self) -> None:
+        self.edits: list[int] = []
+
+
+@pytest.fixture
+def weights(monkeypatch, fake_generate_prompts) -> Weights:
+    """Stands in for the three tensor operations, which need torch and a real model."""
+    module = Weights()
+    monkeypatch.setattr("harness.run.snapshot_targets", lambda m: list(m.edits))
+    monkeypatch.setattr("harness.run.orthogonalize_", lambda m, r: m.edits.append(r))
+    monkeypatch.setattr(
+        "harness.run.restore_targets",
+        lambda m, base: m.edits.__setitem__(slice(None), base),
+    )
+    return module
+
+
+@pytest.fixture
+def edits_when_generating(
+    monkeypatch, weights, fake_generate_prompts
+) -> list[list[int]]:
+    """What the module held at each forward pass, since the log cannot record it."""
+    seen: list[list[int]] = []
+
+    def recording(model, tok, prompts, *, seed):
+        seen.append(list(model.edits))
+        return fake_generate_prompts(model, tok, prompts, seed=seed)
+
+    monkeypatch.setattr("harness.batching.generate_prompts", recording)
+    return seen
+
+
+def sweep(conditions, prefills, tokenizer, weights, tmp_path):
+    return run_sweep(
+        conditions,
+        prefills,
+        module=weights,
+        tokenizer=tokenizer,
+        directions=DIRECTIONS,
+        root=tmp_path,
+    )
+
+
+def test_each_condition_generates_under_its_own_edit_and_nothing_else(
+    prefills, tokenizer, tmp_path, weights, edits_when_generating
+):
+    """An edit left in place would have every later condition generate under weights
+    that compound, with each log still naming its own layer."""
+    conditions = [
+        Condition(id="base", seed=SEED, layer=None, prompt_set="pilot"),
+        Condition(id="layer_02", seed=SEED, layer=2, prompt_set="pilot"),
+        Condition(id="layer_22", seed=SEED, layer=22, prompt_set="pilot"),
+    ]
+
+    logs = sweep(conditions, prefills, tokenizer, weights, tmp_path)
+
+    assert [log.eval.model for log in logs] == [c.model_name for c in conditions]
+    assert {tuple(e) for e in edits_when_generating} == {(), (2,), (22,)}
+    assert weights.edits == []
+
+
+def test_layer_zero_is_edited_like_every_other_layer(
+    prefills, tokenizer, tmp_path, weights, edits_when_generating
+):
+    """Only ``None`` means unedited; layer 0 is a layer."""
+    sweep(
+        [Condition(id="layer_00", seed=SEED, layer=0, prompt_set="pilot")],
+        prefills,
+        tokenizer,
+        weights,
+        tmp_path,
+    )
+
+    assert {tuple(e) for e in edits_when_generating} == {(0,)}
+
+
+def test_a_failed_condition_leaves_the_base_weights_loaded(
+    prefills, tokenizer, tmp_path, weights, fake_generate_prompts
+):
+    """The process survives the raise, so an edit left behind would reach whatever the
+    operator runs next in it."""
+    fake_generate_prompts.fail_after = 2
+
+    with pytest.raises(RuntimeError, match="did not finish"):
+        sweep(
+            [Condition(id="layer_22", seed=SEED, layer=22, prompt_set="pilot")],
+            prefills,
+            tokenizer,
+            weights,
+            tmp_path,
+        )
+
+    assert weights.edits == []
+
+
+def test_the_sweep_stops_at_a_failed_condition(
+    prefills, tokenizer, tmp_path, weights, fake_generate_prompts
+):
+    """Continuing would spend GPU hours on the conditions after a systematic failure."""
+    fake_generate_prompts.fail_after = 2
+    conditions = [
+        Condition(id="layer_22", seed=SEED, layer=22, prompt_set="pilot"),
+        Condition(id="layer_23", seed=SEED, layer=23, prompt_set="pilot"),
+    ]
+
+    with pytest.raises(RuntimeError, match="layer_22 did not finish"):
+        sweep(conditions, prefills, tokenizer, weights, tmp_path)
+
+    assert not list_eval_logs(conditions[1].log_dir(tmp_path))
 
 
 # --- the interruption that actually happens on a pod -----------------------
