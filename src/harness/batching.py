@@ -12,6 +12,7 @@ a forward pass carry the same ``batch_seed``, and it regenerates them.
 
 from __future__ import annotations
 
+from copy import copy
 from dataclasses import asdict, dataclass, field
 
 import anyio
@@ -67,7 +68,7 @@ class BatchGenerator:
                 await self._generate(batch)
 
         if batch.error is not None:
-            raise batch.error
+            raise copy(batch.error)
         return Row(
             **asdict(batch.result[index]),
             seconds=batch.seconds,

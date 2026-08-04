@@ -201,7 +201,9 @@ def test_a_failed_batch_reaches_every_member_as_an_ordinary_exception(monkeypatc
     anyio.run(main)
 
     assert len(errors) == 3
-    assert all(exc is boom for exc in errors)
+    assert all(type(exc) is type(boom) and str(exc) == str(boom) for exc in errors)
+    # One instance per member, or they append to a shared __traceback__.
+    assert len({id(exc) for exc in errors}) == 3
     # Not a cancellation, which would be BaseException-only.
     assert all(isinstance(exc, Exception) for exc in errors)
 
