@@ -100,7 +100,7 @@ def test_no_sample_id_contains_a_colon(prefills):
 
 def test_substitution_keeps_every_slot_distinct():
     """Two slots colliding would silently merge their rows under one id."""
-    slots = (None, *PORTFOLIO)
+    slots = (CONTROL, *PORTFOLIO)
 
     assert len({slot_key(slot) for slot in slots}) == len(slots)
 
@@ -114,7 +114,7 @@ def test_replicates_of_one_prompt_differ_only_by_their_index(prefills):
 
 def test_an_id_survives_a_sample_id_filter(prefills, tmp_path):
     """Resume applies ids this way; a non-match is silent for the rest of the list."""
-    wanted = [sample_id(5, None, 7), sample_id(5, "system_simulation:0", 0)]
+    wanted = [sample_id(5, CONTROL, 7), sample_id(5, "system_simulation:0", 0)]
 
     log = eval(
         refusal_unlock(

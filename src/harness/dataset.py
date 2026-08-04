@@ -28,7 +28,7 @@ CONTROL = "none"
 ATTEMPTS = len(PORTFOLIO)
 
 
-def slot_key(slot: str | None) -> str:
+def slot_key(slot: str) -> str:
     """A slot name safe to put in a ``Sample.id``.
 
     ``eval(sample_id=…)`` splits an id on its first ``:`` and reads the left half as a
@@ -36,10 +36,10 @@ def slot_key(slot: str | None) -> str:
     is dropped from a resume with the run still reporting success. 12 of the 13 slots
     contain a colon.
     """
-    return (slot or CONTROL).replace(":", "-")
+    return slot.replace(":", "-")
 
 
-def sample_id(prompt_id: int, slot: str | None, replicate: int) -> str:
+def sample_id(prompt_id: int, slot: str, replicate: int) -> str:
     """``prompt_id`` is the frozen row index, so pilot ids join onto main-run ids."""
     return f"{prompt_id:03d}/{slot_key(slot)}/{replicate:02d}"
 
@@ -60,7 +60,7 @@ def build_dataset(
     rows = list(EVAL_SETS[condition.prompt_set]().itertuples())
 
     samples = [
-        _sample(condition, row, None, replicate, prefills)
+        _sample(condition, row, CONTROL, replicate, prefills)
         for row in rows
         for replicate in range(ATTEMPTS)
     ]
@@ -73,9 +73,9 @@ def build_dataset(
     return MemoryDataset(samples, name=condition.prompt_set)
 
 
-def _sample(condition: Condition, row, slot: str | None, replicate: int, prefills):
-    prefill = prefills[(row.prompt_id, slot)] if slot is not None else ""
-    if slot is not None and not prefill:
+def _sample(condition: Condition, row, slot: str, replicate: int, prefills):
+    prefill = "" if slot == CONTROL else prefills[(row.prompt_id, slot)]
+    if slot != CONTROL and not prefill:
         raise ValueError(
             f"prefill for ({row.prompt_id}, {slot!r}) is empty; the sample would carry "
             "an attack's label with no attack in it."
@@ -94,9 +94,7 @@ def _sample(condition: Condition, row, slot: str | None, replicate: int, prefill
             "layer": condition.layer,
             "prompt_set": condition.prompt_set,
             "prompt_id": row.prompt_id,
-            # The portfolio's own name, colon intact, unlike the id above.
-            "prefill_slot": slot or CONTROL,
-            # Grading runs in a later process and cannot re-derive this.
+            "prefill_slot": slot,
             "prefill": prefill,
             "replicate": replicate,
             "category": row.category,
