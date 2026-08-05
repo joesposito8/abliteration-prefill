@@ -1,0 +1,75 @@
+{
+  "chosen": 64,
+  "decoding": {
+    "do_sample": true,
+    "max_new_tokens": 512,
+    "min_p": 0.0,
+    "temperature": 0.7,
+    "top_k": 20,
+    "top_p": 0.8
+  },
+  "model": "Qwen/Qwen3-4B",
+  "parity": {
+    "differs_at": [
+      16,
+      32,
+      64,
+      128
+    ],
+    "max_new_tokens": 128,
+    "prompts": 16,
+    "width_invariant": false
+  },
+  "revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+  "rule": "smallest within 10% of the fastest",
+  "seed": 20260805,
+  "torch": "2.11.0+cu128",
+  "transformers": "5.14.1",
+  "widths": [
+    {
+      "peak_vram_gb": 7.5311279296875,
+      "predicted_kv_gb": 0.0756683349609375,
+      "prompts_per_second": 0.23923184395365965,
+      "seconds": 4.180045530200005,
+      "tokens_per_second": 30.382444182114774,
+      "under_fastest": 0.856,
+      "width": 1
+    },
+    {
+      "peak_vram_gb": 9.403438091278076,
+      "predicted_kv_gb": 1.689697265625,
+      "prompts_per_second": 0.8198861457837366,
+      "seconds": 19.51490470021963,
+      "tokens_per_second": 316.73226669307974,
+      "under_fastest": 0.505,
+      "width": 16
+    },
+    {
+      "peak_vram_gb": 11.511630058288574,
+      "predicted_kv_gb": 3.56396484375,
+      "prompts_per_second": 1.2444751058273125,
+      "seconds": 25.713652165606618,
+      "tokens_per_second": 479.745153296429,
+      "under_fastest": 0.249,
+      "width": 32
+    },
+    {
+      "peak_vram_gb": 15.522871494293213,
+      "predicted_kv_gb": 7.1279296875,
+      "prompts_per_second": 1.5036275511444277,
+      "seconds": 42.56373192369938,
+      "tokens_per_second": 551.1734742163793,
+      "under_fastest": 0.093,
+      "width": 64
+    },
+    {
+      "peak_vram_gb": 23.54535722732544,
+      "predicted_kv_gb": 14.255859375,
+      "prompts_per_second": 1.6569642657205306,
+      "seconds": 77.24970456399024,
+      "tokens_per_second": 570.9665849073082,
+      "under_fastest": 0.0,
+      "width": 128
+    }
+  ]
+}
