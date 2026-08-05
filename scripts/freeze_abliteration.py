@@ -83,10 +83,10 @@ def load_rows(root: Path) -> list[dict]:
         rows.append({
             "condition": record["metadata_condition"],
             "prompt_index": int(record["metadata_prompt_id"]),
-            "refused": 1 - int(score["non_refusal"]),
+            "refused": 1 - int(score["unlocked"]),
             "aggregate": score["aggregate"],
             "malformed": bool(score["malformed"]),
-            "degenerate": bool(metadata.get("degenerate")),
+            "degenerate": bool(score["degenerate"]),
             "truncated": int(record["new_tokens"]) >= DECODING["max_new_tokens"],
             "thinking_leak": bool(record["thinking_leak"]),
             "continuation": record["continuation"],

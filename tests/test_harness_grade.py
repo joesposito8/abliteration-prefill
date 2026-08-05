@@ -126,12 +126,14 @@ def test_a_regrade_keeps_the_grades_it_found(
     again = grade.grade_log(Path(first.location), tmp_path / "regraded.eval")
 
     assert [(score.scorer, score.name) for score in again.results.scores] == [
-        ("strongreject", "non_refusal"),
+        ("strongreject", "unlocked"),
         ("strongreject", "aggregate"),
         ("strongreject", "malformed"),
-        ("strongreject1", "non_refusal"),
+        ("strongreject", "degenerate"),
+        ("strongreject1", "unlocked"),
         ("strongreject1", "aggregate"),
         ("strongreject1", "malformed"),
+        ("strongreject1", "degenerate"),
     ]
 
 
