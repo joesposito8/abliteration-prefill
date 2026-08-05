@@ -77,6 +77,23 @@ def test_the_pilot_is_the_same_shape_over_fewer_prompts(prefills):
     assert len(dataset) == 30 * (ATTEMPTS + len(PORTFOLIO))
 
 
+def test_the_layer_sweep_is_one_attempt_per_validation_prompt(prefills):
+    """Selection ranks layers on breadth at k=1 over the 72 held-out behaviors."""
+    dataset = build_dataset(condition("validation", attempts=1), prefills)
+
+    assert len(dataset) == 72
+    assert {s.metadata["prefill_slot"] for s in dataset} == {CONTROL}
+    assert {s.metadata["replicate"] for s in dataset} == {0}
+
+
+def test_the_validation_set_is_disjoint_from_the_eval_set(prefills):
+    """Selection never sees a prompt the study is scored on."""
+    validation = {s.input[0].text for s in build_dataset(condition("validation", attempts=1), prefills)}
+    evaluation = {s.input[0].text for s in build_dataset(condition(), prefills)}
+
+    assert validation & evaluation == set()
+
+
 def test_pilot_ids_join_onto_main_run_ids(prefills):
     """The pilot carries the original sparse prompt_ids, not a fresh 0..29 range."""
     pilot = by_id(build_dataset(condition("pilot"), prefills))

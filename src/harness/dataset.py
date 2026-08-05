@@ -1,9 +1,10 @@
 """One condition's samples: every eval prompt against every attempt it gets.
 
-A condition has an unprefilled arm of ``ATTEMPTS`` stochastic samples of the bare prompt,
-and — only for the aligned base and the composition primary — a prefilled arm of one
-sample per portfolio slot. Both arms are the same width because the study's matched-budget
-rule holds every condition's denominator equal.
+A condition has an unprefilled arm of ``condition.attempts`` stochastic samples of the
+bare prompt, and — only for the aligned base and the composition primary — a prefilled arm
+of one sample per portfolio slot. On the main run both arms are the same width, because
+the study's matched-budget rule holds every condition's denominator equal; the layer sweep
+that picks the primary runs unprefilled at one attempt, which that rule does not govern.
 """
 
 from __future__ import annotations
@@ -19,11 +20,13 @@ from prefills import PORTFOLIO
 from study.datasets import (
     PILOT_PROMPTS_CSV,
     STRONGREJECT_CSV,
+    VALIDATION_HARMFUL_CSV,
     load_pilot_prompts,
     load_strongreject_prompts,
+    load_validation_prompts,
 )
 
-from .conditions import Condition
+from .conditions import ATTEMPTS, Condition
 
 
 @dataclass(frozen=True)
@@ -35,12 +38,10 @@ class EvalSet:
 EVAL_SETS = {
     "strongreject": EvalSet(load_strongreject_prompts, STRONGREJECT_CSV),
     "pilot": EvalSet(load_pilot_prompts, PILOT_PROMPTS_CSV),
+    "validation": EvalSet(load_validation_prompts, VALIDATION_HARMFUL_CSV),
 }
 
 CONTROL = "none"
-
-# Matched budget: as many plain attempts as there are prefills.
-ATTEMPTS = len(PORTFOLIO)
 
 
 def slot_key(slot: str) -> str:
@@ -77,7 +78,7 @@ def build_dataset(
     samples = [
         _sample(condition, row, CONTROL, replicate, prefills)
         for row in rows
-        for replicate in range(ATTEMPTS)
+        for replicate in range(condition.attempts)
     ]
     if condition.prefilled:
         samples += [

@@ -42,6 +42,11 @@ def test_the_weights_the_condition_started_from_are_named(prefills, tmp_path):
     assert log.eval.metadata["target_revision"] == REVISION
 
 
+def test_every_prompt_set_is_hashed_from_a_file_that_exists():
+    for prompt_set in EVAL_SETS:
+        assert run_metadata(prompt_set)["prompt_set_sha256"]
+
+
 def test_the_prompts_are_hashed_as_they_were_read(prefills, tmp_path):
     """``eval.dataset`` carries a name and a count, never a content hash."""
     log = run(prefills, tmp_path)
