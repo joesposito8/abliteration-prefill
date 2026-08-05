@@ -30,8 +30,9 @@ from inspect_ai.log import (  # noqa: E402
 )
 from inspect_ai.model import ModelConfig  # noqa: E402
 
-# Declared on the header rather than passed to score(), which reads roles from the
-# header and never writes them back. Set here or nothing records what graded the run.
+# Declared on the header rather than passed to score(), which reads roles from there and
+# never writes them back. Both ways resolve the same judge; only this one leaves the
+# header able to name it, rather than every sample's transcript separately.
 GRADER = {"grader": ModelConfig(model=f"openai/{JUDGE_MODEL}")}
 
 

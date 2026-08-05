@@ -74,8 +74,8 @@ def test_the_judge_pinned_is_the_one_the_rubric_was_calibrated_on():
 def test_the_scored_log_names_the_judge_that_produced_it(
     prefills, tokenizer, tmp_path, fake_generate_prompts, judged_as_refusal
 ):
-    """``score`` reads roles from the header and never writes them back, so a log
-    graded without this records nothing about what graded it."""
+    """``score`` reads roles from the header and never writes them back, so a log graded
+    without this can only be asked which judge it used one sample at a time."""
     source, output = generate(prefills, tokenizer, tmp_path)
 
     [log] = graded(source, output)
