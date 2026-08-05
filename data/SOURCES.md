@@ -38,7 +38,9 @@ the script aborts if an upstream hash drifts. Global seed `SEED = 20260724`
   - https://github.com/centerforaisafety/HarmBench → `data/behavior_datasets/harmbench_behaviors_text_all.csv`
 - `extraction_harmful.csv` (128) / `validation_harmful.csv` (72) — disjoint
   complement within the 200; extraction feeds direction extraction, validation
-  feeds primary-layer selection.
+  feeds primary-layer selection. Both carry the parent's columns, `prompt_id`
+  included, so a row's id is the position it was drawn from and the two id sets
+  partition `range(200)` — the split is stated by the files, not only by the seed.
 - `extraction_harmless.csv` (128) — Alpaca instructions with empty `input`,
   exact-text deduped (first occurrence), seeded-sampled; the harmless contrast.
   `alpaca_data.json` (52,002 items) is not vendored (22 MB); its SHA-256 is pinned.

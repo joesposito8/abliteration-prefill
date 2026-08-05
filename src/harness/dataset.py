@@ -20,7 +20,7 @@ from study.datasets import (
     PILOT_PROMPTS_CSV,
     STRONGREJECT_CSV,
     load_pilot_prompts,
-    load_strongreject,
+    load_strongreject_prompts,
 )
 
 from .conditions import Condition
@@ -33,7 +33,7 @@ class EvalSet:
 
 
 EVAL_SETS = {
-    "strongreject": EvalSet(load_strongreject, STRONGREJECT_CSV),
+    "strongreject": EvalSet(load_strongreject_prompts, STRONGREJECT_CSV),
     "pilot": EvalSet(load_pilot_prompts, PILOT_PROMPTS_CSV),
 }
 

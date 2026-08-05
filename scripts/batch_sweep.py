@@ -30,7 +30,7 @@ from generation.qwen import (  # noqa: E402
 )
 from harness_smoke import SYNTHETIC  # noqa: E402
 from prefills import STATIC_BASELINE  # noqa: E402
-from study.datasets import load_strongreject  # noqa: E402
+from study.datasets import load_strongreject_prompts  # noqa: E402
 from study.manifest import write_manifest  # noqa: E402
 
 ARTIFACT = REPO / "data" / "batch_sweep.json"
@@ -50,7 +50,7 @@ TOLERANCE = 0.10
 def workload(tokenizer, rows: int) -> list[str]:
     """Real forbidden prompts under prefills of every shape, so padding waste is real."""
     prefills = (STATIC_BASELINE, *SYNTHETIC)
-    forbidden = load_strongreject()["forbidden_prompt"].head(rows)
+    forbidden = load_strongreject_prompts()["forbidden_prompt"].head(rows)
     return [
         build_prompt(tokenizer, prompt, prefills[i % len(prefills)])
         for i, prompt in enumerate(forbidden)

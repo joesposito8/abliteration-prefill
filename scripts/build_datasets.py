@@ -12,6 +12,10 @@ Outputs (all under ``data/``):
   pilot_prompts.csv                   30 StrongREJECT prompts (seeded pilot slice)
   freeze_manifest.json               seeds, hashes, counts, verbatim-overlap report
 
+The three HarmBench files are one table in three parts: the 200-row parent and the two
+splits cut from it share their columns, and a split's ``prompt_id`` is the parent row it
+was drawn at. Everything a prompt set needs to become an eval set travels with it.
+
 Run:  python scripts/build_datasets.py
 """
 
@@ -40,7 +44,7 @@ from study.datasets import (  # noqa: E402
     PILOT_PROMPTS_CSV,
     STRONGREJECT_CSV,
     VALIDATION_HARMFUL_CSV,
-    load_strongreject,
+    load_strongreject_prompts,
     sample_indices,
     split_indices,
     verbatim_overlap,
@@ -65,6 +69,11 @@ N_EXTRACTION = 128
 N_VALIDATION = 72
 N_HARMLESS = 128
 N_PILOT = 30
+
+# The HarmBench-derived files carry the eval-set columns plus their own key, so the
+# 200-row parent and the two splits cut from it are one table in three files.
+HARMBENCH_SOURCE = "harmbench_standard"
+COLS_HARMFUL = ["prompt_id", "behavior_id", "category", "source", "forbidden_prompt"]
 
 
 def _fetch(url: str, expected_sha256: str) -> bytes:
@@ -122,17 +131,22 @@ def main() -> None:
     hb = pd.read_csv(io.BytesIO(hb_bytes))
     std = hb[hb["FunctionalCategory"] == "standard"].copy()
     std = std.sort_values("BehaviorID", kind="stable").reset_index(drop=True)
-    std = std.rename(columns={"SemanticCategory": "semantic_category"})
     assert len(std) == 200, f"expected 200 standard behaviors, got {len(std)}"
     assert std["BehaviorID"].is_unique, "BehaviorID not unique among standard behaviors"
-    std_out = std.rename(columns={"BehaviorID": "behavior_id"})[
-        ["behavior_id", "Behavior", "semantic_category"]
-    ]
+    # prompt_id is the row index in the canonical order just established, matching the
+    # rule StrongREJECT's prompt_id follows. The splits below inherit it.
+    behaviors = pd.DataFrame(
+        {
+            "prompt_id": range(len(std)),
+            "behavior_id": std["BehaviorID"].values,
+            "category": std["SemanticCategory"].values,
+            "source": HARMBENCH_SOURCE,
+            "forbidden_prompt": std["Behavior"].values,
+        }
+    )
     artifacts[HARMBENCH_STANDARD_CSV.name] = {
-        "sha256": _write_csv(
-            std_out, HARMBENCH_STANDARD_CSV, ["behavior_id", "Behavior", "semantic_category"]
-        ),
-        "rows": len(std_out),
+        "sha256": _write_csv(behaviors, HARMBENCH_STANDARD_CSV, COLS_HARMFUL),
+        "rows": len(behaviors),
     }
 
     # --- 128 extraction / 72 validation split (disjoint complement within 200) ---
@@ -140,25 +154,17 @@ def main() -> None:
     assert set(ext_idx).isdisjoint(val_idx)
     assert sorted(ext_idx + val_idx) == list(range(200))
 
-    def _harmful_frame(idx: list[int]) -> pd.DataFrame:
-        f = std.iloc[idx].copy()
-        return pd.DataFrame(
-            {
-                "prompt": f["Behavior"].values,
-                "behavior_id": f["BehaviorID"].values,
-                "semantic_category": f["semantic_category"].values,
-            }
-        )
-
-    ext_df = _harmful_frame(ext_idx)
-    val_df = _harmful_frame(val_idx)
-    cols_harmful = ["prompt", "behavior_id", "semantic_category"]
+    # The draw is a set of parent row indices, and prompt_id rides along as exactly
+    # that — so the committed files state the split rather than merely resulting from
+    # it, and disjointness is checkable without re-running the seed.
+    ext_df = behaviors.iloc[ext_idx]
+    val_df = behaviors.iloc[val_idx]
     artifacts[EXTRACTION_HARMFUL_CSV.name] = {
-        "sha256": _write_csv(ext_df, EXTRACTION_HARMFUL_CSV, cols_harmful),
+        "sha256": _write_csv(ext_df, EXTRACTION_HARMFUL_CSV, COLS_HARMFUL),
         "rows": len(ext_df),
     }
     artifacts[VALIDATION_HARMFUL_CSV.name] = {
-        "sha256": _write_csv(val_df, VALIDATION_HARMFUL_CSV, cols_harmful),
+        "sha256": _write_csv(val_df, VALIDATION_HARMFUL_CSV, COLS_HARMFUL),
         "rows": len(val_df),
     }
 
@@ -195,7 +201,7 @@ def main() -> None:
         raise SystemExit(
             f"committed StrongREJECT hash changed\n  expected {STRONGREJECT_SHA256}\n  got {sr_sha}"
         )
-    sr = load_strongreject()
+    sr = load_strongreject_prompts()
     assert len(sr) == 313
     pilot_ids = sample_indices(len(sr), N_PILOT, SEED)
     pilot_df = sr.iloc[pilot_ids].copy()
@@ -215,9 +221,15 @@ def main() -> None:
         return {n: verbatim_overlap(pool, sr_prompts, normalize=n) for n in _NORMALIZERS}
 
     verbatim = {
-        "harmbench200_vs_strongreject313": _overlap_report(std["Behavior"].tolist()),
-        "extraction128_vs_strongreject313": _overlap_report(ext_df["prompt"].tolist()),
-        "validation72_vs_strongreject313": _overlap_report(val_df["prompt"].tolist()),
+        "harmbench200_vs_strongreject313": _overlap_report(
+            behaviors["forbidden_prompt"].tolist()
+        ),
+        "extraction128_vs_strongreject313": _overlap_report(
+            ext_df["forbidden_prompt"].tolist()
+        ),
+        "validation72_vs_strongreject313": _overlap_report(
+            val_df["forbidden_prompt"].tolist()
+        ),
         "harmless128_vs_strongreject313": _overlap_report(harmless_df["prompt"].tolist()),
     }
     exact_match_count = verbatim["harmbench200_vs_strongreject313"]["none"]
@@ -229,12 +241,14 @@ def main() -> None:
         "seed": SEED,
         "rng_method": "numpy.random.RandomState (legacy MT19937); permutation over canonical order",
         "canonical_order": {
-            "harmbench_standard": "sorted by BehaviorID (stable)",
+            "harmbench_standard": "sorted by BehaviorID, stable (prompt_id = 0-based index)",
             "strongreject": "file row order (prompt_id = 0-based index)",
         },
         "split_method": (
             "RandomState(SEED).permutation(200): [:128]=extraction, [128:]=validation; "
-            "non-stratified; disjoint complement within the 200 standard behaviors"
+            "non-stratified; disjoint complement within the 200 standard behaviors. "
+            "Each split's prompt_id is the parent row index it was drawn at, so the two "
+            "id sets partition range(200)"
         ),
         "pilot_method": (
             "RandomState(SEED).permutation(313)[:30] (seeded-random 30 of the 313; "
@@ -242,7 +256,7 @@ def main() -> None:
             "reused as the first block of the main evaluation run)"
         ),
         "counts": {
-            "harmbench_standard": len(std_out),
+            "harmbench_standard": len(behaviors),
             "extraction_harmful": len(ext_df),
             "validation_harmful": len(val_df),
             "extraction_harmless": len(harmless_df),
