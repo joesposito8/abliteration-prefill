@@ -99,6 +99,58 @@ def test_refusal_directions_recover_known_axis_and_normalize():
 
 
 @needs_torch
+def test_save_load_directions_round_trip_on_cpu(tmp_path):
+    from abliteration import directions
+
+    dirs = torch.randn(4, 6, dtype=torch.float64)
+    path = tmp_path / "nested" / "directions.pt"
+    sha = directions.save_directions(dirs, path)
+
+    loaded = directions.load_directions(path)
+    assert loaded.device.type == "cpu"  # must load without CUDA
+    assert loaded.dtype == torch.float64
+    assert torch.equal(loaded, dirs)
+    # torch.save names the zip entries after the file stem, so the hash is stable across
+    # directories but not across renames: produce and commit under one basename.
+    assert sha == directions.save_directions(dirs, tmp_path / "elsewhere" / "directions.pt")
+    assert sha != directions.save_directions(dirs, tmp_path / "renamed.pt")
+
+
+@needs_torch
+def test_orthogonalize_from_loaded_file_matches_in_memory(tmp_path):
+    from abliteration import directions, edit
+
+    r = torch.randn(8, dtype=torch.float64)
+    path = tmp_path / "directions.pt"
+    directions.save_directions(r.unsqueeze(0), path)
+
+    from_memory = _stub_model(d_model=8)
+    from_file = _stub_model(d_model=8)
+    edit.restore_targets(from_file, edit.snapshot_targets(from_memory))
+    edit.orthogonalize_(from_memory, r)
+    edit.orthogonalize_(from_file, directions.load_directions(path)[0])
+
+    for (a, _), (b, _) in zip(edit.target_matrices(from_memory), edit.target_matrices(from_file)):
+        assert torch.equal(a, b)
+
+
+@needs_torch
+def test_repeated_edit_restore_cycles_do_not_drift():
+    from abliteration import edit
+
+    model = _stub_model(d_model=8)
+    for weight, _ in edit.target_matrices(model):
+        weight.data = weight.data.to(torch.bfloat16)
+    snapshot = edit.snapshot_targets(model)
+
+    for _ in range(3):
+        edit.orthogonalize_(model, torch.randn(8))
+        edit.restore_targets(model, snapshot)
+        for (weight, _), saved in zip(edit.target_matrices(model), snapshot):
+            assert torch.equal(weight.data, saved)
+
+
+@needs_torch
 def test_refusal_directions_reject_degenerate_layer():
     from abliteration import directions
 

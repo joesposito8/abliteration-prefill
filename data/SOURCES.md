@@ -109,6 +109,11 @@ arXiv:2406.11717.
 
 ## Not vendored
 
-The full ~1,361-point human-labeled autograder-validation set is not a single
-public CSV; it is reconstructed via the dsbowen `src/*labelbox*` scripts from a
-labelbox export (see arXiv:2402.10260 and the repo's `Data_Card.pdf`).
+The ~1,361-point human-labeled autograder-validation set (arXiv:2402.10260) is a
+single public CSV, pulled from OSF project `osf.io/j69tc` by `dsbowen/strong_reject`'s
+`make download_data`. Not vendored — nothing in this repo reads it — but it is a
+direct download if the grader ever needs re-validating.
+
+- https://osf.io/download/jwmqe → `labelbox.csv` — 1,361 human labels
+- https://osf.io/download/92s8k → `labelbox_evals.csv` — the authors' per-evaluator
+  grades, including `strongreject_rubric` judged by gpt-4o-mini

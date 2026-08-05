@@ -44,7 +44,11 @@ def collect_mean_last_token_states(model, tokenizer, prompts, *, batch_size: int
 
 
 def refusal_directions(harmful_means, harmless_means):
-    """Per-layer unit directions ``[L, d_model]``; row l uses hidden-state row l+1."""
+    """Per-layer unit directions ``[L, d_model]``; row l uses hidden-state row l+1.
+
+    The last hidden-state entry is post-final-norm, so row L-1 is extracted in the normed
+    space and is not strictly comparable to the rows below it.
+    """
     import torch
 
     diff = (harmful_means - harmless_means)[1:]  # drop embeddings row
@@ -55,16 +59,24 @@ def refusal_directions(harmful_means, harmless_means):
 
 
 def save_directions(directions, path) -> str:
-    """Save ``directions`` to ``path``; return its SHA-256."""
+    """Save ``directions`` to ``path``; return its SHA-256.
+
+    Moved to CPU first: saving a CUDA tensor pickles its device tag, so the file would
+    not load without a GPU and its SHA-256 would depend on where it was produced.
+
+    The hash is over the file, which ``torch.save`` names its zip entries after: stable
+    across directories, but a rename changes it. Save under the basename you will keep.
+    """
     import torch
 
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(directions, path)
+    torch.save(directions.detach().cpu(), path)
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def load_directions(path):
+def load_directions(path, *, map_location="cpu", weights_only=True):
+    """Load directions; CPU by default so the file reads on machines without CUDA."""
     import torch
 
-    return torch.load(path)
+    return torch.load(path, map_location=map_location, weights_only=weights_only)
