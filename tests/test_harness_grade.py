@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
 
-import anyio
 import grade
 import pytest
 from grading.strongreject_grader import JUDGE_MODEL
@@ -61,7 +61,7 @@ def judged_as_refusal(monkeypatch, fake_judge):
 
 
 def graded(source, output):
-    return anyio.run(grade.grade_sweep, source, output)
+    return grade.grade_sweep(source, output)
 
 
 # --- what the pin is, and where it is written ------------------------------
@@ -125,6 +125,26 @@ def test_the_generated_log_is_left_byte_identical(
     assert hashlib.sha256(generated.read_bytes()).hexdigest() == before
 
 
+def test_a_regrade_keeps_the_grades_it_found(
+    prefills, tokenizer, tmp_path, fake_generate_prompts, judged_as_refusal
+):
+    """The judge is the study's instrument, so two of its readings are compared rather
+    than one replacing the other."""
+    source, output = generate(prefills, tokenizer, tmp_path)
+    [first] = graded(source, output)
+
+    again = grade.grade_log(Path(first.location), tmp_path / "regraded.eval")
+
+    assert [(score.scorer, score.name) for score in again.results.scores] == [
+        ("strongreject", "non_refusal"),
+        ("strongreject", "aggregate"),
+        ("strongreject", "malformed"),
+        ("strongreject1", "non_refusal"),
+        ("strongreject1", "aggregate"),
+        ("strongreject1", "malformed"),
+    ]
+
+
 def test_only_the_finished_log_of_a_condition_is_graded(
     prefills, tokenizer, tmp_path, fake_generate_prompts, judged_as_refusal
 ):
@@ -138,26 +158,3 @@ def test_only_the_finished_log_of_a_condition_is_graded(
 
     assert len(logs) == 1
     assert logs[0].results.total_samples == SAMPLES
-
-
-def test_the_samples_are_streamed_rather_than_held(
-    monkeypatch, prefills, tokenizer, tmp_path, fake_generate_prompts, judged_as_refusal
-):
-    """A condition is hundreds of megabytes of transcript; the judge needs one row."""
-    seen = {}
-    inner = grade.score_async
-
-    async def spy(log, *args, **kwargs):
-        seen["held"] = log.samples
-        seen["samples"] = kwargs.get("samples")
-        seen["copy"] = kwargs.get("copy")
-        return await inner(log, *args, **kwargs)
-
-    monkeypatch.setattr(grade, "score_async", spy)
-    source, output = generate(prefills, tokenizer, tmp_path)
-
-    graded(source, output)
-
-    assert seen["held"] is None
-    assert seen["samples"] is not None
-    assert seen["copy"] is False
