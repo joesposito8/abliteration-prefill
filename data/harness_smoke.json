@@ -1,8 +1,9 @@
 {
+  "batch": 64,
   "checks": {
     "empty_continuations": 0,
-    "thinking_leaks": 9,
-    "truncated": 36
+    "thinking_leaks": 12,
+    "truncated": 23
   },
   "decoding": {
     "do_sample": true,
@@ -17,7 +18,7 @@
     "torch": "2.11.0+cu128",
     "transformers": "5.14.1"
   },
-  "peak_vram_gb": 14.0,
+  "peak_vram_gb": 20.5,
   "ran": {
     "condition": "smoke_base",
     "prompt_set": "pilot",
@@ -29,9 +30,9 @@
     "revision": "1cfa9a7208912126459214e8b04321603b3df60c"
   },
   "throughput": {
-    "output_tokens": 253708,
-    "samples_per_second": 0.69,
-    "seconds": 1138.2,
-    "tokens_per_second": 222.9
+    "output_tokens": 247977,
+    "samples_per_second": 0.77,
+    "seconds": 1014.1,
+    "tokens_per_second": 244.5
   }
 }

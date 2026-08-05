@@ -78,12 +78,16 @@ m,t = load_model(); print(generate(m, t, 'Say hi.', seed=1).continuation)"
 ```
 
 Reference environment: NVIDIA A100 80GB, Python 3.12, torch 2.11.0+cu128, transformers
-5.14.1, BF16. Throughput and peak-memory figures are re-measured on this stack during
-the harness pilot; the earlier torch 2.7.1 numbers (~8 GB peak, ~29 tok/s
-single-stream) are not carried forward, because a torch minor can change sampled
-tokens and so the reference environment moves with it. The base model is 36 layers
-with `self_attn.o_proj` / `mlp.down_proj` on each — the modules the abliteration step
-edits.
+5.14.1, BF16. Measured on it at batch 64 over 780 samples: **0.77 samples/s, 244.5
+output tokens/s, 20.5 GiB peak** (`data/harness_smoke.json`); a single stream manages
+30 tokens/s, so the batching is worth roughly eight times. The earlier torch 2.7.1
+figures are not carried forward, because a torch minor can change sampled tokens and so
+the reference environment moves with it. The base model is 36 layers with
+`self_attn.o_proj` / `mlp.down_proj` on each — the modules the abliteration step edits.
+
+Batch width is a frozen study parameter, not a tuning knob: greedy output is not
+width-invariant, so conditions generated at different widths are not comparable. The
+width, the curve behind it and the rule that picked it are in `data/batch_sweep.json`.
 
 ## Abliteration
 

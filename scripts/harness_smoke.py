@@ -26,6 +26,7 @@ from generation.qwen import (  # noqa: E402
     load_model,
 )
 from harness.conditions import Condition  # noqa: E402
+from harness.batching import BATCH  # noqa: E402
 from harness.dataset import EVAL_SETS, build_dataset  # noqa: E402
 from harness.run import run_condition  # noqa: E402
 from inspect_ai.dataset import MemoryDataset  # noqa: E402
@@ -94,6 +95,7 @@ def report(log, seconds: float, artifact: Path) -> None:
             },
             "target": {"model": MODEL_ID, "revision": REVISION},
             "decoding": dict(DECODING),
+            "batch": BATCH,
             "environment": {
                 "torch": torch.__version__,
                 "transformers": transformers.__version__,
