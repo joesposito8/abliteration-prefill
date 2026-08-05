@@ -80,25 +80,35 @@ def report(log, seconds: float) -> None:
     print(f"log            {log.location}")
 
 
-def main(argv: list[str]) -> None:
+def preflight():
+    """Everything checkable before the meter starts, and a look at what will run."""
     import torch
+
+    for (prompt_id, slot), prefill in smoke_prefills().items():
+        reason = validate(prefill)
+        if reason:
+            raise SystemExit(f"synthetic prefill for {slot} of {prompt_id} is {reason}")
+
+    dataset = smoke_dataset()
+    real = sum(not s.metadata["synthetic_prefill"] for s in dataset)
+    print(f"{len(dataset)} samples: {real} real prefills, {len(dataset) - real} stood in")
 
     if not torch.cuda.is_available():
         raise SystemExit(
             "no CUDA device; the locked torch replaces the image's, so check the "
             "install before spending GPU time"
         )
+    return dataset
 
-    for slot, prefill in smoke_prefills().items():
-        reason = validate(prefill)
-        if reason:
-            raise SystemExit(f"synthetic prefill for {slot} is {reason}")
 
+def main(argv: list[str]) -> None:
+    dataset = preflight()
     model, tokenizer = load_model()
+
     started = time.monotonic()
     log = run_condition(
         CONDITION,
-        smoke_dataset(),
+        dataset,
         module=model,
         tokenizer=tokenizer,
         root=Path(argv[0]).resolve(),
