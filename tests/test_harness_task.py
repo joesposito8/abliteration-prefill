@@ -21,7 +21,7 @@ def condition() -> Condition:
 
 def tiny() -> MemoryDataset:
     """Task rejects an empty dataset, and these tests only read back the config."""
-    return MemoryDataset([Sample(id="000/none", input="q", target="")])
+    return MemoryDataset([Sample(id="000/none", input="q", target="")], name="pilot")
 
 
 def run(prefills, tmp_path, **eval_kwargs):

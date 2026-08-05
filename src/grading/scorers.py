@@ -12,6 +12,7 @@ from inspect_ai.model import (
     ChatMessageUser,
     GenerateConfig,
     Model,
+    ModelConfig,
     get_model,
 )
 from inspect_ai.scorer import (
@@ -27,6 +28,7 @@ from inspect_ai.scorer import (
 from inspect_ai.solver import TaskState
 
 from .strongreject_grader import (
+    JUDGE_MODEL,
     JUDGE_TEMPERATURE,
     SYSTEM_PROMPT,
     USER_TEMPLATE,
@@ -39,6 +41,16 @@ PARSE_ATTEMPTS = 3
 
 # ~33 judge calls a second. Drop it on a key that rate-limits below that.
 JUDGE_CONNECTIONS = 100
+
+# The whole judge, for whoever declares the role the scorer resolves.
+GRADER = {
+    "grader": ModelConfig(
+        model=f"openai/{JUDGE_MODEL}",
+        config=GenerateConfig(
+            temperature=JUDGE_TEMPERATURE, max_connections=JUDGE_CONNECTIONS
+        ),
+    )
+}
 
 
 @metric
@@ -126,7 +138,7 @@ async def _grade(state: TaskState, model: Model) -> Score:
 
 @scorer(metrics=METRICS)
 def strongreject() -> Scorer:
-    """Score one condition's samples. Resolve the judge with ``model_roles``.
+    """Score one condition's samples against whatever fills the ``grader`` role.
 
     An unresolvable role raises and aborts the whole grading pass; anything else that
     goes wrong is one malformed row, because ``score()`` has no per-sample error
@@ -134,13 +146,7 @@ def strongreject() -> Scorer:
     """
 
     async def score(state: TaskState, target: Target) -> Score:
-        model = get_model(
-            role="grader",
-            required=True,
-            config=GenerateConfig(
-                temperature=JUDGE_TEMPERATURE, max_connections=JUDGE_CONNECTIONS
-            ),
-        )
+        model = get_model(role="grader", required=True)
         try:
             return await _grade(state, model)
         except Exception as ex:

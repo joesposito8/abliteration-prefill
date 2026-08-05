@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from grading.scorers import JUDGE_CONNECTIONS, PARSE_ATTEMPTS, strongreject
-from grading.strongreject_grader import JUDGE_TEMPERATURE, aggregate_score
+from grading.scorers import GRADER, JUDGE_CONNECTIONS, PARSE_ATTEMPTS, strongreject
+from grading.strongreject_grader import JUDGE_MODEL, JUDGE_TEMPERATURE, aggregate_score
 from harness.conditions import Condition
 from harness.dataset import build_dataset
 from harness.task import refusal_unlock
@@ -36,7 +36,8 @@ def generated(tmp_path, tokenizer, prefills, sample_id: str):
 
 
 def graded(log, judge):
-    scored = score(log, strongreject(), model_roles={"grader": judge.model})
+    log.eval.model_roles = judge.role
+    scored = score(log, strongreject())
     return scored, scored.samples[0].scores["strongreject"]
 
 
@@ -181,20 +182,23 @@ def test_the_generation_log_declares_no_judge(
     assert not log.eval.model_roles
 
 
-def test_the_judge_is_asked_at_temperature_zero(
+def test_the_judge_pinned_is_the_one_the_rubric_was_calibrated_on():
+    assert GRADER["grader"].model == f"openai/{JUDGE_MODEL}"
+    assert GRADER["grader"].config.temperature == JUDGE_TEMPERATURE == 0.0
+    assert GRADER["grader"].config.max_connections == JUDGE_CONNECTIONS
+
+
+def test_the_judge_is_asked_with_the_config_its_declaration_carries(
     tmp_path, tokenizer, prefills, fake_generate_prompts, fake_judge
 ):
-    """A role declared at the CLI carries an empty config, so ours wins the merge."""
+    """The scorer states nothing about temperature; it travels with the role."""
     log = generated(tmp_path, tokenizer, prefills, CONTROL)
     judge = fake_judge(lambda text: rubric(0))
 
-    scored, _ = graded(log, judge)
+    graded(log, judge)
 
     assert judge.configs[0].temperature == JUDGE_TEMPERATURE == 0.0
     assert judge.configs[0].max_connections == JUDGE_CONNECTIONS
-    # score() reads model_roles but never writes them back, so the scored log has no
-    # record of which judge produced it. The grading script has to write the pin.
-    assert scored.eval.model_roles is None
 
 
 # --- what the metrics look like --------------------------------------------

@@ -19,8 +19,7 @@ from urllib.parse import urlparse
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
-from grading.scorers import strongreject  # noqa: E402
-from grading.strongreject_grader import JUDGE_MODEL  # noqa: E402
+from grading.scorers import GRADER, strongreject  # noqa: E402
 from inspect_ai import score  # noqa: E402
 from inspect_ai.log import (  # noqa: E402
     EvalLog,
@@ -28,12 +27,6 @@ from inspect_ai.log import (  # noqa: E402
     read_eval_log,
     write_eval_log,
 )
-from inspect_ai.model import ModelConfig  # noqa: E402
-
-# Declared on the header rather than passed to score(), which reads roles from there and
-# never writes them back. Both ways resolve the same judge; only this one leaves the
-# header able to name it, rather than every sample's transcript separately.
-GRADER = {"grader": ModelConfig(model=f"openai/{JUDGE_MODEL}")}
 
 
 def finished_logs(root: Path) -> list:
@@ -50,7 +43,11 @@ def finished_logs(root: Path) -> list:
 
 
 def grade_log(source: Path, output: Path) -> EvalLog:
-    """Score one condition, whole. The largest is 8,138 samples and ~250 MB read in."""
+    """Score one condition, whole. The largest is 8,138 samples and ~250 MB read in.
+
+    ``score`` reads the judge from the header and never writes it back, so declaring it
+    there is also what records it.
+    """
     log = read_eval_log(str(source))
     log.eval.model_roles = GRADER
     scored = score(log, strongreject(), action="append", copy=False)

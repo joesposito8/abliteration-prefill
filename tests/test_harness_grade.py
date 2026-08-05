@@ -7,13 +7,11 @@ from pathlib import Path
 
 import grade
 import pytest
-from grading.strongreject_grader import JUDGE_MODEL
 from harness.conditions import Condition
 from harness.dataset import build_dataset
 from harness.run import run_condition
 from inspect_ai.dataset import MemoryDataset
 from inspect_ai.log import list_eval_logs, read_eval_log
-from inspect_ai.model import ModelConfig
 
 SEED = 20260803
 SAMPLES = 6
@@ -52,11 +50,7 @@ def generate(prefills, tokenizer, tmp_path, *, fail_first=False, injected=None):
 def judged_as_refusal(monkeypatch, fake_judge):
     """Replaces the pin with a local judge, through the header the real one uses."""
     judge = fake_judge(lambda _: REFUSAL)
-    monkeypatch.setattr(
-        grade,
-        "GRADER",
-        {"grader": ModelConfig(model="mockllm/model", args={"custom_outputs": judge})},
-    )
+    monkeypatch.setattr(grade, "GRADER", judge.role)
     return judge
 
 
@@ -65,10 +59,6 @@ def graded(source, output):
 
 
 # --- what the pin is, and where it is written ------------------------------
-
-
-def test_the_judge_pinned_is_the_one_the_rubric_was_calibrated_on():
-    assert grade.GRADER["grader"].model == f"openai/{JUDGE_MODEL}"
 
 
 def test_the_scored_log_names_the_judge_that_produced_it(

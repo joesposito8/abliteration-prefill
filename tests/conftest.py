@@ -125,12 +125,20 @@ class FakeJudge:
     """
 
     def __init__(self, reply) -> None:
-        from inspect_ai.model import get_model
-
         self.reply = reply
         self.judged: list[str] = []
         self.configs: list = []
-        self.model = get_model("mockllm/model", custom_outputs=self)
+
+    @property
+    def role(self) -> dict:
+        """The real declaration with a local model in place of the pinned one."""
+        from grading.scorers import GRADER
+
+        return {
+            "grader": GRADER["grader"].model_copy(
+                update={"model": "mockllm/model", "args": {"custom_outputs": self}}
+            )
+        }
 
     def __call__(self, input, tools, tool_choice, config):
         from inspect_ai.model import ModelOutput
