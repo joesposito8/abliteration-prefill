@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import hashlib
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from types import MappingProxyType
 
@@ -227,8 +228,13 @@ def generate_prompts(
     prompts: list[str],
     *,
     seed: int,
+    decoding: Mapping[str, object] = DECODING,
 ) -> tuple[list[Continuation], float]:
-    """Run already-rendered prompts through the model in one batched call."""
+    """Run already-rendered prompts through the model in one batched call.
+
+    ``decoding`` is overridable for measurement only: comparing batch widths needs
+    greedy output, where a difference can only be numerical.
+    """
     import torch
 
     # Left padding keeps the prompt the same length for every row, so generated
@@ -241,7 +247,7 @@ def generate_prompts(
     torch.manual_seed(batch_seed(seed, prompts))
     start = time.perf_counter()
     with torch.inference_mode():
-        outputs = model.generate(**encoded, **DECODING)
+        outputs = model.generate(**encoded, **decoding)
     batch_seconds = time.perf_counter() - start
 
     # Pull the generated tokens and prompt lengths to the host once, rather than
