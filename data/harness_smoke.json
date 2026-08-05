@@ -4,6 +4,14 @@
     "thinking_leaks": 9,
     "truncated": 36
   },
+  "decoding": {
+    "do_sample": true,
+    "max_new_tokens": 1024,
+    "min_p": 0.0,
+    "temperature": 0.7,
+    "top_k": 20,
+    "top_p": 0.8
+  },
   "environment": {
     "gpu": "NVIDIA A100-SXM4-80GB",
     "torch": "2.11.0+cu128",

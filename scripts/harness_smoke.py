@@ -93,6 +93,7 @@ def report(log, seconds: float, artifact: Path) -> None:
                 ),
             },
             "target": {"model": MODEL_ID, "revision": REVISION},
+            "decoding": dict(DECODING),
             "environment": {
                 "torch": torch.__version__,
                 "transformers": transformers.__version__,
