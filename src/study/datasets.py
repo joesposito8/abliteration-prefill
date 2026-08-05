@@ -69,31 +69,27 @@ def verbatim_overlap(a, b, normalize: str = "none") -> int:
 
 # --- loaders ---------------------------------------------------------------
 #
-# A prompt file does one of two jobs, and its shape follows the job. An EVAL SET is
-# something the target model is evaluated on: it becomes Inspect samples, so it loads
-# as a frame carrying prompt_id, category, source and forbidden_prompt. A CONTRAST
-# CORPUS is fed to direction extraction, which reads nothing but the text, so it loads
-# as a list of prompts. ``harness.dataset.EVAL_SETS`` is the registry of the former.
+# Shape follows job: an eval set the model is scored on loads as a frame carrying the
+# columns a sample is built from; a contrast corpus for direction extraction loads as
+# a list of prompts, which is all it is ever read for.
 
 EVAL_SET_COLUMNS = ("prompt_id", "category", "source", "forbidden_prompt")
 
 
 def load_harmbench_standard() -> pd.DataFrame:
-    """The 200 HarmBench standard behaviors — the parent both harmful splits are cut from.
+    """The 200 HarmBench standard behaviors: the parent of both harmful splits.
 
-    ``prompt_id`` is the row index in canonical order (sorted by ``behavior_id``), so a
-    split's ids say which rows of this file it took.
+    ``prompt_id`` is the row index in ``behavior_id`` order, so a split's ids name the
+    rows it took.
     """
     return pd.read_csv(HARMBENCH_STANDARD_CSV)
 
 
 def load_strongreject_prompts() -> pd.DataFrame:
-    """The frozen 313-prompt StrongREJECT eval set with a ``prompt_id`` column.
+    """The frozen 313-prompt StrongREJECT eval set, ``prompt_id`` = row index.
 
-    The one loader that derives its id instead of reading it: this file is vendored
-    byte-identical to the published set, so a column cannot be added to it without
-    giving that up. ``prompt_id`` is the 0-based row index in file order, and the
-    committed file hash pins that order.
+    The one loader that derives its id rather than reading it: the file is vendored
+    byte-identical to the published set, so no column may be added to it.
     """
     df = pd.read_csv(STRONGREJECT_CSV)
     df.insert(0, "prompt_id", range(len(df)))
@@ -101,20 +97,12 @@ def load_strongreject_prompts() -> pd.DataFrame:
 
 
 def load_pilot_prompts() -> pd.DataFrame:
-    """The seeded-random 30 StrongREJECT prompts (the pilot slice).
-
-    ``prompt_id`` is the parent's, so pilot rows join onto main-run rows.
-    """
+    """The seeded-random 30 StrongREJECT prompts (the pilot slice), with prompt_id."""
     return pd.read_csv(PILOT_PROMPTS_CSV)
 
 
 def load_validation_prompts() -> pd.DataFrame:
-    """The 72 HarmBench-standard behaviors used for primary-layer selection.
-
-    ``prompt_id`` is inherited from the 200-row parent, so these ids and the extraction
-    split's partition ``range(200)`` — the disjointness the extraction corpus rests on
-    is readable from the two files rather than re-derived from the seed.
-    """
+    """The 72 HarmBench-standard behaviors used for primary-layer selection."""
     return pd.read_csv(VALIDATION_HARMFUL_CSV)
 
 
@@ -124,10 +112,5 @@ def load_extraction_harmful() -> list[str]:
 
 
 def load_extraction_harmless() -> list[str]:
-    """The 128 Alpaca harmless instructions (extraction contrast).
-
-    Keeps its own column names: these are not forbidden prompts, and ``alpaca_index``
-    indexes a different corpus than ``prompt_id`` does, so it must not be joinable
-    against the harmful splits by accident.
-    """
+    """The 128 Alpaca harmless instructions (extraction contrast)."""
     return pd.read_csv(EXTRACTION_HARMLESS_CSV)["prompt"].tolist()
