@@ -19,13 +19,22 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
-from generation.qwen import load_model  # noqa: E402
+from generation.qwen import (  # noqa: E402
+    DECODING,
+    MODEL_ID,
+    REVISION,
+    load_model,
+)
 from harness.conditions import Condition  # noqa: E402
 from harness.dataset import EVAL_SETS, build_dataset  # noqa: E402
 from harness.run import run_condition  # noqa: E402
 from inspect_ai.dataset import MemoryDataset  # noqa: E402
+from inspect_ai.log import read_eval_log  # noqa: E402
 from prefills import PORTFOLIO, STATIC_BASELINE, validate  # noqa: E402
 from prefills.families import STATIC_SLOT_ID  # noqa: E402
+from study.manifest import write_manifest  # noqa: E402
+
+ARTIFACT = REPO / "data" / "harness_smoke.json"
 
 CONDITION = Condition(
     id="smoke_base", seed=20260805, layer=None, prompt_set="pilot", prefilled=True
@@ -65,19 +74,52 @@ def smoke_dataset() -> MemoryDataset:
     return dataset
 
 
-def report(log, seconds: float) -> None:
+def report(log, seconds: float, artifact: Path) -> None:
+    """What the README needs re-measured, and what only a real model can answer."""
     import torch
+    import transformers
 
     usage = log.stats.model_usage[CONDITION.model_name]
-    print(f"samples        {log.results.total_samples}")
-    print(
-        f"elapsed        {seconds:.0f} s ({log.results.total_samples / seconds:.2f}/s)"
+    samples = read_eval_log(log.location).samples
+    write_manifest(
+        artifact,
+        {
+            "ran": {
+                "condition": CONDITION.id,
+                "prompt_set": CONDITION.prompt_set,
+                "samples": log.results.total_samples,
+                "synthetic_prefills": sum(
+                    s.metadata["synthetic_prefill"] for s in samples
+                ),
+            },
+            "target": {"model": MODEL_ID, "revision": REVISION},
+            "environment": {
+                "torch": torch.__version__,
+                "transformers": transformers.__version__,
+                "gpu": torch.cuda.get_device_name(0),
+            },
+            "throughput": {
+                "seconds": round(seconds, 1),
+                "samples_per_second": round(log.results.total_samples / seconds, 2),
+                "output_tokens": usage.output_tokens,
+                "tokens_per_second": round(usage.output_tokens / seconds, 1),
+            },
+            "peak_vram_gb": round(torch.cuda.max_memory_allocated() / 2**30, 1),
+            "checks": {
+                "thinking_leaks": sum(
+                    s.output.metadata["thinking_leak"] for s in samples
+                ),
+                "empty_continuations": sum(
+                    not s.output.completion.strip() for s in samples
+                ),
+                "truncated": sum(
+                    s.output.metadata["new_tokens"] >= DECODING["max_new_tokens"]
+                    for s in samples
+                ),
+            },
+        },
     )
-    print(
-        f"generated      {usage.output_tokens} tokens ({usage.output_tokens / seconds:.1f}/s)"
-    )
-    print(f"peak VRAM      {torch.cuda.max_memory_allocated() / 2**30:.1f} GiB")
-    print(f"log            {log.location}")
+    print(f"wrote {artifact}")
 
 
 def preflight():
@@ -91,7 +133,9 @@ def preflight():
 
     dataset = smoke_dataset()
     real = sum(not s.metadata["synthetic_prefill"] for s in dataset)
-    print(f"{len(dataset)} samples: {real} real prefills, {len(dataset) - real} stood in")
+    print(
+        f"{len(dataset)} samples: {real} real prefills, {len(dataset) - real} stood in"
+    )
 
     if not torch.cuda.is_available():
         raise SystemExit(
@@ -113,7 +157,7 @@ def main(argv: list[str]) -> None:
         tokenizer=tokenizer,
         root=Path(argv[0]).resolve(),
     )
-    report(log, time.monotonic() - started)
+    report(log, time.monotonic() - started, ARTIFACT)
 
 
 if __name__ == "__main__":

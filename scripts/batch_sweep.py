@@ -14,7 +14,6 @@ Run:  python scripts/batch_sweep.py [artifact-path]
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -32,6 +31,7 @@ from generation.qwen import (  # noqa: E402
 from harness_smoke import SYNTHETIC  # noqa: E402
 from prefills import STATIC_BASELINE  # noqa: E402
 from study.datasets import load_strongreject  # noqa: E402
+from study.manifest import write_manifest  # noqa: E402
 
 ARTIFACT = REPO / "data" / "batch_sweep.json"
 SEED = 20260805
@@ -125,6 +125,10 @@ def choose_width(measurements: list[dict]) -> tuple[int, str]:
     fastest = max(eligible, key=lambda m: m["prompts_per_second"])
     floor = fastest["prompts_per_second"] * (1 - TOLERANCE)
 
+    for measurement in measurements:
+        under = 1 - measurement["prompts_per_second"] / fastest["prompts_per_second"]
+        measurement["under_fastest"] = round(under, 3)
+
     chosen, rule = fastest, "fastest within the memory ceiling"
     smaller = sorted(
         (m for m in eligible if m["width"] < fastest["width"]),
@@ -165,9 +169,8 @@ def main(argv: list[str]) -> None:
         "chosen": chosen,
         "rule": rule,
     }
-    artifact.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
-    print(json.dumps(result, indent=2, sort_keys=True))
-    print(f"\nwrote {artifact}")
+    write_manifest(artifact, result)
+    print(f"parity {invariance}\nchose {chosen} ({rule})\nwrote {artifact}")
 
 
 if __name__ == "__main__":

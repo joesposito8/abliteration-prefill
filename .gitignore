@@ -7,3 +7,6 @@ __pycache__/
 
 # Run artifacts: raw evidence kept locally, reported via the context item
 results/
+
+# Fetched label sets for scripts/grader_check.py
+.cache/
