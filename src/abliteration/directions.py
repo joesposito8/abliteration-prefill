@@ -67,4 +67,4 @@ def save_directions(directions, path) -> str:
 def load_directions(path):
     import torch
 
-    return torch.load(path, map_location="cpu", weights_only=True)
+    return torch.load(path)
