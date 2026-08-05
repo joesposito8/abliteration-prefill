@@ -19,7 +19,7 @@ import anyio
 import anyio.lowlevel
 from generation.qwen import Continuation, batch_seed, generate_prompts
 
-# A memory bound: the KV cache for this many 512-token sequences must fit alongside
+# A memory bound: the KV cache for this many 1024-token sequences must fit alongside
 # the weights.
 BATCH = 32
 
