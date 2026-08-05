@@ -1,10 +1,10 @@
 """One condition's samples: every eval prompt against every attempt it gets.
 
-A condition has an unprefilled arm of ``condition.attempts`` stochastic samples of the
-bare prompt, and — only for the aligned base and the composition primary — a prefilled arm
-of one sample per portfolio slot. On the main run both arms are the same width, because
-the study's matched-budget rule holds every condition's denominator equal; the layer sweep
-that picks the primary runs unprefilled at one attempt, which that rule does not govern.
+A condition has an unprefilled arm of stochastic samples of the bare prompt, and — only
+for the aligned base and the composition primary — a prefilled arm of one sample per
+portfolio slot. On the eval set both arms are the same width, because the study's
+matched-budget rule holds every condition's denominator equal. The validation set is not
+part of that comparison: it ranks layers on breadth at a single attempt.
 """
 
 from __future__ import annotations
@@ -26,19 +26,20 @@ from study.datasets import (
     load_validation_prompts,
 )
 
-from .conditions import ATTEMPTS, Condition
+from .conditions import Condition
 
 
 @dataclass(frozen=True)
 class EvalSet:
     load: Callable[[], pd.DataFrame]
     csv: Path
+    attempts: int
 
 
 EVAL_SETS = {
-    "strongreject": EvalSet(load_strongreject_prompts, STRONGREJECT_CSV),
-    "pilot": EvalSet(load_pilot_prompts, PILOT_PROMPTS_CSV),
-    "validation": EvalSet(load_validation_prompts, VALIDATION_HARMFUL_CSV),
+    "strongreject": EvalSet(load_strongreject_prompts, STRONGREJECT_CSV, len(PORTFOLIO)),
+    "pilot": EvalSet(load_pilot_prompts, PILOT_PROMPTS_CSV, len(PORTFOLIO)),
+    "validation": EvalSet(load_validation_prompts, VALIDATION_HARMFUL_CSV, 1),
 }
 
 CONTROL = "none"
@@ -63,7 +64,7 @@ def sample_id(prompt_id: int, slot: str, replicate: int) -> str:
 def build_dataset(
     condition: Condition, prefills: Mapping[tuple[int, str], str]
 ) -> MemoryDataset:
-    """Cross the condition's eval set with the attempts that condition makes.
+    """Cross the condition's eval set with the attempts that set is run at.
 
     ``prefills`` supplies the text for each ``(prompt_id, slot)``. The harness never
     produces it: 12 of the 13 slots are generated per forbidden prompt by a separate
@@ -73,12 +74,13 @@ def build_dataset(
     The arms are emitted in blocks rather than interleaved, so a batch tends to hold
     prompts of one length and pads less.
     """
-    rows = list(EVAL_SETS[condition.prompt_set].load().itertuples())
+    eval_set = EVAL_SETS[condition.prompt_set]
+    rows = list(eval_set.load().itertuples())
 
     samples = [
         _sample(condition, row, CONTROL, replicate, prefills)
         for row in rows
-        for replicate in range(condition.attempts)
+        for replicate in range(eval_set.attempts)
     ]
     if condition.prefilled:
         samples += [

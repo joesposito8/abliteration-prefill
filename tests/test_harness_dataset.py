@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 from harness.conditions import Condition
 from harness.dataset import (
-    ATTEMPTS,
     CONTROL,
+    EVAL_SETS,
     build_dataset,
     sample_id,
     slot_key,
@@ -40,7 +40,7 @@ def test_an_unprefilled_condition_is_replicates_of_the_bare_prompt(prefills):
     """35 of the 37 layers are unprefilled breadth controls."""
     dataset = build_dataset(condition(), prefills)
 
-    assert len(dataset) == PROMPTS * ATTEMPTS
+    assert len(dataset) == PROMPTS * EVAL_SETS["strongreject"].attempts
     assert {s.metadata["prefill_slot"] for s in dataset} == {CONTROL}
 
 
@@ -48,13 +48,13 @@ def test_a_prefilled_condition_adds_one_sample_per_portfolio_slot(prefills):
     """Only the aligned base and the composition primary carry the portfolio."""
     dataset = build_dataset(condition(prefilled=True), prefills)
 
-    assert len(dataset) == PROMPTS * (ATTEMPTS + len(PORTFOLIO))
+    assert len(dataset) == PROMPTS * (EVAL_SETS["strongreject"].attempts + len(PORTFOLIO))
     assert {s.metadata["prefill_slot"] for s in dataset} == {CONTROL, *PORTFOLIO}
 
 
 def test_both_arms_are_the_same_width(prefills):
     """The matched budget is the study's control; unequal arms would break it."""
-    assert ATTEMPTS == len(PORTFOLIO) == 13
+    assert EVAL_SETS["strongreject"].attempts == len(PORTFOLIO) == 13
 
 
 def test_the_sweep_sums_to_the_preregistered_workload(prefills):
@@ -74,12 +74,12 @@ def test_every_sample_id_is_unique(prefills):
 def test_the_pilot_is_the_same_shape_over_fewer_prompts(prefills):
     dataset = build_dataset(condition("pilot", prefilled=True), prefills)
 
-    assert len(dataset) == 30 * (ATTEMPTS + len(PORTFOLIO))
+    assert len(dataset) == 30 * (EVAL_SETS["pilot"].attempts + len(PORTFOLIO))
 
 
 def test_the_layer_sweep_is_one_attempt_per_validation_prompt(prefills):
     """Selection ranks layers on breadth at k=1 over the 72 held-out behaviors."""
-    dataset = build_dataset(condition("validation", attempts=1), prefills)
+    dataset = build_dataset(condition("validation"), prefills)
 
     assert len(dataset) == 72
     assert {s.metadata["prefill_slot"] for s in dataset} == {CONTROL}
@@ -88,7 +88,7 @@ def test_the_layer_sweep_is_one_attempt_per_validation_prompt(prefills):
 
 def test_the_validation_set_is_disjoint_from_the_eval_set(prefills):
     """Selection never sees a prompt the study is scored on."""
-    validation = {s.input[0].text for s in build_dataset(condition("validation", attempts=1), prefills)}
+    validation = {s.input[0].text for s in build_dataset(condition("validation"), prefills)}
     evaluation = {s.input[0].text for s in build_dataset(condition(), prefills)}
 
     assert validation & evaluation == set()
@@ -126,7 +126,7 @@ def test_replicates_of_one_prompt_differ_only_by_their_index(prefills):
     dataset = build_dataset(condition(), prefills)
     ids = sorted(s.id for s in dataset if s.id.startswith("005/"))
 
-    assert ids == [f"005/none/{n:02d}" for n in range(ATTEMPTS)]
+    assert ids == [f"005/none/{n:02d}" for n in range(EVAL_SETS["strongreject"].attempts)]
 
 
 def test_an_id_survives_a_sample_id_filter(prefills, tmp_path):
@@ -174,7 +174,7 @@ def test_a_missing_prefill_is_refused(prefills):
 
 def test_an_unprefilled_condition_needs_no_prefills():
     """The 35 breadth controls must not depend on a helper run that has not happened."""
-    assert len(build_dataset(condition("pilot"), {})) == 30 * ATTEMPTS
+    assert len(build_dataset(condition("pilot"), {})) == 30 * EVAL_SETS["pilot"].attempts
 
 
 def test_an_empty_prefill_for_a_real_slot_is_refused():

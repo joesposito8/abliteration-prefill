@@ -5,12 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from prefills import PORTFOLIO
-
 PROVIDER = "qwen-local"
-
-# Matched budget: as many plain attempts as there are prefills.
-ATTEMPTS = len(PORTFOLIO)
 
 
 @dataclass(frozen=True)
@@ -28,7 +23,6 @@ class Condition:
     layer: int | None = None
     prompt_set: str = "strongreject"
     prefilled: bool = False
-    attempts: int = ATTEMPTS
 
     @property
     def model_name(self) -> str:
