@@ -60,12 +60,7 @@ def run_condition(
 
 
 def restore_and_verify(module, base, condition_id: str) -> None:
-    """Put the base weights back, then prove they went back.
-
-    Inspect identifies weights by the model name it was given, so a restore that only
-    partly took is invisible: every later condition generates under an edit that is
-    still there, and each log still names its own layer.
-    """
+    """Put the base weights back, then prove they went back."""
     import torch
 
     restore_targets(module, base)
