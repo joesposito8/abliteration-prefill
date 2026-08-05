@@ -1,0 +1,29 @@
+{
+  "checks": {
+    "empty_continuations": 0,
+    "thinking_leaks": 9,
+    "truncated": 169
+  },
+  "environment": {
+    "gpu": "NVIDIA A100-SXM4-80GB",
+    "torch": "2.11.0+cu128",
+    "transformers": "5.14.1"
+  },
+  "peak_vram_gb": 11.5,
+  "ran": {
+    "condition": "smoke_base",
+    "prompt_set": "pilot",
+    "samples": 780,
+    "synthetic_prefills": 360
+  },
+  "target": {
+    "model": "Qwen/Qwen3-4B",
+    "revision": "1cfa9a7208912126459214e8b04321603b3df60c"
+  },
+  "throughput": {
+    "output_tokens": 208527,
+    "samples_per_second": 1.48,
+    "seconds": 528.3,
+    "tokens_per_second": 394.7
+  }
+}
