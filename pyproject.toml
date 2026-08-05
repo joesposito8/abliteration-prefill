@@ -35,7 +35,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "scripts"]
 markers = [
     "live: test makes a real (paid) OpenAI API call; deselect with -m 'not live'",
 ]
