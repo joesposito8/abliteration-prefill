@@ -13,7 +13,6 @@ from abliteration.selection import (
     score,
     select_primary,
     selectable,
-    sweep_seed,
 )
 
 N = 72
@@ -166,15 +165,7 @@ def test_band_is_reported_in_rank_order():
     assert select_primary(reports).band == ("layer_02", "layer_03", "layer_01")
 
 
-# --- seeds ---------------------------------------------------------------------
-
-
-def test_sweep_seed_is_deterministic_and_distinct_per_condition():
-    assert sweep_seed("layer_22") == sweep_seed("layer_22")
-    seeds = {sweep_seed(condition_id(layer)) for layer in range(36)}
-    assert len(seeds) == 36
-    assert sweep_seed("base") not in seeds
-    assert all(0 <= seed < 2**64 for seed in seeds)  # valid for torch.manual_seed
+# --- condition naming ----------------------------------------------------------
 
 
 def test_condition_id_is_zero_padded():

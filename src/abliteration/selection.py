@@ -12,21 +12,12 @@ Pure: no torch, no OpenAI, no file access. Grades arrive as plain mappings.
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-
-from study import SEED
 
 NEAR_TIE_PROMPTS = 3  # band width, ~1 binomial SE on breadth at n=72
 
 BASE_CONDITION = "base"
-
-
-def sweep_seed(condition: str) -> int:
-    """Deterministic, distinct seed per condition."""
-    key = f"{SEED}:sweep:{condition}".encode("utf-8")
-    return int.from_bytes(hashlib.sha256(key).digest()[:8], "big")
 
 
 def condition_id(layer: int | None) -> str:
