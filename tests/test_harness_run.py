@@ -10,6 +10,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import textwrap
+import time
 
 import pytest
 from harness.batching import BATCH
@@ -293,8 +294,8 @@ calls = {"n": 0}
 def fake(model, tok, prompts, *, seed):
     calls["n"] += 1
     if calls["n"] > 2:
-        print("READY", flush=True)
-        time.sleep(120)
+        Path(sys.argv[1], "READY").write_text("x")
+        time.sleep(300)
     return [
         Continuation(continuation=" c", raw_continuation=" c",
                      prompt_tokens=3, new_tokens=4)
@@ -324,22 +325,23 @@ def test_a_killed_run_resumes_from_what_reached_the_log(
     script = tmp_path / "child.py"
     script.write_text(textwrap.dedent(CHILD))
 
-    child = subprocess.Popen(
-        [sys.executable, str(script), str(tmp_path)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-    try:
-        for line in child.stdout:
-            if line.strip() == "READY":
-                break
-        else:
+    # The child signals through the filesystem: Inspect takes over stdout for its
+    # display, so a pipe is not a reliable channel out of a run.
+    ready = tmp_path / "READY"
+    output = tmp_path / "child.out"
+    with output.open("w") as sink:
+        child = subprocess.Popen(
+            [sys.executable, str(script), str(tmp_path)], stdout=sink, stderr=sink
+        )
+        try:
+            deadline = time.monotonic() + 120
+            while not ready.exists():
+                if child.poll() is not None or time.monotonic() > deadline:
+                    pytest.fail(f"child never generated: {output.read_text()[-2000:]}")
+                time.sleep(0.2)
+        finally:
             child.kill()
-            pytest.fail(f"child never generated: {child.stderr.read()}")
-    finally:
-        child.kill()
-        child.wait(timeout=30)
+            child.wait(timeout=30)
 
     flushed = len(settled(tmp_path))
     assert 0 < flushed < PILOT

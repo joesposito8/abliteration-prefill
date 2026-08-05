@@ -21,7 +21,7 @@ from generation.qwen import Continuation, batch_seed, generate_prompts
 
 # A memory bound: the KV cache for this many 1024-token sequences must fit alongside
 # the weights.
-BATCH = 32
+BATCH = 64
 
 # The connection limiter is held across the whole provider call, so at 1x the running
 # batch owns every permit and the next one cannot assemble.
