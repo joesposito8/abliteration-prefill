@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from abliteration import orthogonalize_, restore_targets, snapshot_targets
+from abliteration.edit import target_matrices
 from inspect_ai import eval_set
 from inspect_ai.dataset import Dataset
 from inspect_ai.log import EvalLog
@@ -58,6 +59,21 @@ def run_condition(
     return logs[0]
 
 
+def restore_and_verify(module, base, condition_id: str) -> None:
+    """Put the base weights back, then prove they went back.
+
+    Inspect identifies weights by the model name it was given, so a restore that only
+    partly took is invisible: every later condition generates under an edit that is
+    still there, and each log still names its own layer.
+    """
+    import torch
+
+    restore_targets(module, base)
+    for (weight, _), saved in zip(target_matrices(module), base):
+        if not torch.equal(weight.data, saved):
+            raise RuntimeError(f"{condition_id}: restore left weights modified")
+
+
 def run_sweep(
     conditions: Sequence[Condition],
     prefills: Mapping[tuple[int, str], str],
@@ -91,5 +107,5 @@ def run_sweep(
                 )
             )
         finally:
-            restore_targets(module, base)
+            restore_and_verify(module, base, condition.id)
     return logs

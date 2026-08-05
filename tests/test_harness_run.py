@@ -7,10 +7,12 @@ GPU bill partway through a metered run.
 
 from __future__ import annotations
 
+import operator
 import subprocess
 import sys
 import textwrap
 import time
+from types import SimpleNamespace
 
 import pytest
 from harness.batching import BATCH
@@ -168,16 +170,27 @@ class Weights:
         self.edits: list[int] = []
 
 
+# The real edit spans 73 matrices; a snapshot and a verify have to cover all of them.
+MATRICES = 3
+
+
 @pytest.fixture
 def weights(monkeypatch, fake_generate_prompts) -> Weights:
-    """Stands in for the three tensor operations, which need torch and a real model."""
+    """Stands in for the tensor operations, which need torch and a real model."""
     module = Weights()
-    monkeypatch.setattr("harness.run.snapshot_targets", lambda m: list(m.edits))
+    monkeypatch.setattr(
+        "harness.run.snapshot_targets", lambda m: [tuple(m.edits)] * MATRICES
+    )
     monkeypatch.setattr("harness.run.orthogonalize_", lambda m, r: m.edits.append(r))
     monkeypatch.setattr(
         "harness.run.restore_targets",
-        lambda m, base: m.edits.__setitem__(slice(None), base),
+        lambda m, base: m.edits.__setitem__(slice(None), base[0]),
     )
+    monkeypatch.setattr(
+        "harness.run.target_matrices",
+        lambda m: [(SimpleNamespace(data=tuple(m.edits)), 0)] * MATRICES,
+    )
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(equal=operator.eq))
     return module
 
 
@@ -257,6 +270,23 @@ def test_a_failed_condition_leaves_the_base_weights_loaded(
         )
 
     assert weights.edits == []
+
+
+def test_a_restore_that_did_not_take_stops_the_sweep(
+    monkeypatch, prefills, tokenizer, tmp_path, weights, fake_generate_prompts
+):
+    """The failure this catches is silent otherwise: the log names the layer it was
+    asked for either way, so every later condition would carry this one's edit."""
+    monkeypatch.setattr("harness.run.restore_targets", lambda m, base: None)
+    conditions = [
+        Condition(id="layer_22", seed=SEED, layer=22, prompt_set="pilot"),
+        Condition(id="layer_23", seed=SEED, layer=23, prompt_set="pilot"),
+    ]
+
+    with pytest.raises(RuntimeError, match="layer_22: restore left weights modified"):
+        sweep(conditions, prefills, tokenizer, weights, tmp_path)
+
+    assert not list_eval_logs(conditions[1].log_dir(tmp_path))
 
 
 def test_the_sweep_stops_at_a_failed_condition(
