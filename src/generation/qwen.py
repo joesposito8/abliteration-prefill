@@ -230,11 +230,7 @@ def generate_prompts(
     seed: int,
     decoding: Mapping[str, object] = DECODING,
 ) -> tuple[list[Continuation], float]:
-    """Run already-rendered prompts through the model in one batched call.
-
-    ``decoding`` is overridable for measurement only: comparing batch widths needs
-    greedy output, where a difference can only be numerical.
-    """
+    """Run already-rendered prompts through the model in one batched call."""
     import torch
 
     # Left padding keeps the prompt the same length for every row, so generated

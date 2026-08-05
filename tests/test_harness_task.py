@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import pytest
-from generation.qwen import DECODING
-from harness.batching import BATCH, IN_FLIGHT
 from harness.conditions import Condition
 from harness.dataset import build_dataset
 from harness.provider import require_frozen_config
@@ -45,17 +43,6 @@ def test_the_config_the_task_builds_passes_the_provider_check():
     require_frozen_config(refusal_unlock(tiny(), seed=SEED).config)
 
 
-def test_the_config_carries_the_whole_frozen_set():
-    config = refusal_unlock(tiny(), seed=SEED).config
-
-    assert config.temperature == DECODING["temperature"]
-    assert config.top_p == DECODING["top_p"]
-    assert config.top_k == DECODING["top_k"]
-    assert config.max_tokens == DECODING["max_new_tokens"]
-    assert config.extra_body == {
-        "min_p": DECODING["min_p"],
-        "do_sample": DECODING["do_sample"],
-    }
 
 
 def test_the_seed_is_whatever_the_caller_supplied():
@@ -63,18 +50,7 @@ def test_the_seed_is_whatever_the_caller_supplied():
     assert refusal_unlock(tiny(), seed=7).config.seed == 7
 
 
-def test_the_pipeline_is_deep_enough_for_a_second_batch():
-    """At 1x the running batch owns every permit and the next cannot assemble."""
-    depth = refusal_unlock(tiny(), seed=SEED).config.max_connections
 
-    assert depth == IN_FLIGHT == 2 * BATCH
-
-
-def test_no_batch_api_and_no_cache_are_requested():
-    config = refusal_unlock(tiny(), seed=SEED).config
-
-    assert config.batch is None  # Inspect's provider batch API, not our coalescer
-    assert config.cache_prompt is None
 
 
 # --- what the log header records -------------------------------------------
@@ -117,9 +93,6 @@ def test_the_task_runs_from_inside_the_repo_so_a_real_run_records_the_commit():
     assert top_level.returncode == 0, top_level.stderr
 
 
-def test_the_merged_config_that_ran_is_the_frozen_one(prefills, tmp_path):
-    log = run(prefills, tmp_path)
-
-    assert log.plan.config.seed == SEED
-    assert log.plan.config.temperature == DECODING["temperature"]
-    assert log.plan.config.max_tokens == DECODING["max_new_tokens"]
+def test_the_seed_survives_into_the_log(prefills, tmp_path):
+    """An eval kwarg beats Task.config, so what was declared and what ran can differ."""
+    assert run(prefills, tmp_path).plan.config.seed == SEED

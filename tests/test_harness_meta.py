@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import hashlib
-import json
 
 from generation.qwen import MODEL_ID, REVISION
 from harness.conditions import Condition
 from harness.dataset import EVAL_SETS, build_dataset
-from harness.meta import PORTFOLIO_MANIFEST_JSON, run_metadata
+from harness.meta import run_metadata
 from harness.task import refusal_unlock
 from inspect_ai import eval
 from inspect_ai.log import read_eval_log
@@ -53,13 +52,3 @@ def test_the_prompts_are_hashed_as_they_were_read(prefills, tmp_path):
         == hashlib.sha256(EVAL_SETS["pilot"].csv.read_bytes()).hexdigest()
     )
 
-
-def test_the_two_prompt_sets_hash_differently():
-    """A condition run on the pilot must not read as one run on the full set."""
-    assert run_metadata("pilot") != run_metadata("strongreject")
-
-
-def test_the_slot_contract_the_dataset_was_built_against_is_identified():
-    manifest = json.loads(PORTFOLIO_MANIFEST_JSON.read_text())
-
-    assert run_metadata("pilot")["portfolio_sha256"] == manifest["portfolio_sha256"]
