@@ -77,7 +77,7 @@ uv run python -c "from generation import load_model, generate; \
 m,t = load_model(); print(generate(m, t, 'Say hi.', seed=1).continuation)"
 ```
 
-Reference environment: NVIDIA A100 80GB, Python 3.12, torch 2.13.0, transformers
+Reference environment: NVIDIA A100 80GB, Python 3.12, torch 2.11.0+cu128, transformers
 5.14.1, BF16. Throughput and peak-memory figures are re-measured on this stack during
 the harness pilot; the earlier torch 2.7.1 numbers (~8 GB peak, ~29 tok/s
 single-stream) are not carried forward, because a torch minor can change sampled
