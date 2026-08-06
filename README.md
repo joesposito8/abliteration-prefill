@@ -5,8 +5,9 @@ Research code investigating whether inference-time **prefilling** and weight-spa
 how much extra coverage comes from combining them. Responses are scored with
 StrongREJECT.
 
-**Status:** early. Grading and target generation are built; sections marked _TODO_ are
-filled in as each piece lands.
+**Status:** grading, generation, abliteration and the prefill portfolio are built, and
+the primary-layer selection sweep runs end to end. The main comparison is not run yet;
+sections marked _TODO_ are filled in as each piece lands.
 
 ## Setup
 
@@ -111,6 +112,11 @@ with abliterated(model, directions[22]):                # base weights restored 
 against the direction, then restores the base weights — no edited checkpoint is
 persisted. Callers supply their own harmful/harmless contrast and evaluation prompts.
 
+`scripts/extract_directions.py` is the study's own path through this: it extracts over
+the frozen 128/128 contrast corpora, checks the edit targets against the loaded config,
+and writes `data/refusal_directions.pt` plus the two robustness cosines. Method and
+layer-indexing caveats: `data/SOURCES.md`.
+
 ## Prefill portfolio
 
 The fixed 13-prefill attack portfolio: six helper-prompt families (each producing two
@@ -140,6 +146,47 @@ uv run python scripts/freeze_portfolio.py   # writes data/portfolio_manifest.jso
 
 Sources and the two documented example deviations: `data/SOURCES.md`.
 
+## Harness
+
+Generation and grading run on [Inspect](https://inspect.aisi.org.uk/). One condition is
+one `eval_set` call against a local provider holding the already-loaded model, in its own
+log directory — so re-running a killed sweep resumes each condition from what its log
+already holds rather than regenerating it.
+
+Conditions run strictly one at a time (`max_tasks=1`). That is a correctness rule and not
+a throughput choice: the module is a single mutable object, so two conditions in flight
+would both generate under whichever weight edit was applied last, while each log still
+named its own layer. After every condition the base weights are restored and compared
+against a snapshot, and a mismatch aborts the sweep.
+
+Generation declares no judge and needs no API key; grading is a separate pass over the
+logs that appends scores, so a condition can be re-graded without regenerating it.
+
+## Primary-layer selection sweep
+
+Picks the abliteration layer the main comparison uses, on 72 HarmBench behaviours
+disjoint from the evaluation prompts. Four steps, each resumable by re-running it:
+
+```bash
+uv run python scripts/extract_directions.py                             # once, GPU
+uv run python scripts/generate.py results/sweep/generated               # GPU
+uv run python scripts/grade.py results/sweep/generated results/sweep/scored
+uv run python scripts/freeze_abliteration.py --run results/sweep --excerpts 2
+uv run python scripts/freeze_abliteration.py --run results/sweep --write
+```
+
+Generation runs 37 conditions — the unedited base plus every layer — at one attempt per
+prompt. The selection rule is breadth (non-refusal rate at k=1), then mean quality over
+*all* prompts among layers within three unlocked prompts of the best, then the lowest
+layer index. Malformed and degenerate rows are non-unlocks that stay in the denominator,
+so a degrading layer loses breadth without a separate exclusion rule deciding it is unfit.
+
+The freeze step prints the 37-row table and the tie-break trace and writes nothing by
+default; `--excerpts N` additionally prints a few unlocked continuations per near-tie
+layer, terminal-only. `--write` commits `data/layer_selection.csv` and
+`data/abliteration_manifest.json`. Definitions and the method behind every column:
+`data/SOURCES.md`.
+
 ## Evaluation
 
 _TODO — run the prefilling-vs-abliteration comparison and analyze coverage._
@@ -147,9 +194,13 @@ _TODO — run the prefilling-vs-abliteration comparison and analyze coverage._
 ## Layout
 
 ```
-src/grading/      StrongREJECT grader + prefill hook
+src/harness/      Inspect harness: local provider, batching, task, sweep driver
+src/grading/      StrongREJECT rubric, parser, and the Inspect scorer
 src/generation/   target-model generation (GPU)
+src/abliteration/ direction extraction, weight editing, the selection rule
 src/prefills/     the 13-prefill attack portfolio (helper prompts + frozen rules)
-data/             prompt set, graded examples, sources
+src/study/        frozen datasets and splits, manifest hashing
+scripts/          the runnable steps: freeze, extract, generate, grade, select
+data/             prompt sets, frozen artifacts and manifests, sources
 tests/            offline + live tests
 ```
