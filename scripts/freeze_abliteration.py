@@ -32,6 +32,7 @@ from abliteration.selection import (  # noqa: E402
     select_primary,
     selectable,
 )
+from generation.qwen import N_LAYERS  # noqa: E402
 from grading.strongreject_grader import JUDGE_MODEL  # noqa: E402
 from harness.conditions import PROVIDER  # noqa: E402
 from inspect_ai.log import read_eval_log  # noqa: E402
@@ -47,7 +48,6 @@ from grade import finished_logs  # noqa: E402
 TABLE_PATH = DATA_DIR / "layer_selection.csv"
 MANIFEST_PATH = DATA_DIR / "abliteration_manifest.json"
 DIRECTIONS_PATH = DATA_DIR / "refusal_directions.pt"
-N_LAYERS = 36
 SCORER = "strongreject"
 
 

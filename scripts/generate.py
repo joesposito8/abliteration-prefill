@@ -17,7 +17,7 @@ sys.path.insert(0, str(REPO / "src"))
 
 from abliteration import load_directions  # noqa: E402
 from abliteration.selection import condition_id  # noqa: E402
-from generation.qwen import load_model  # noqa: E402
+from generation.qwen import N_LAYERS, load_model  # noqa: E402
 from harness.conditions import Condition  # noqa: E402
 from harness.run import run_sweep  # noqa: E402
 from study import SEED  # noqa: E402
@@ -26,11 +26,11 @@ from study.datasets import DATA_DIR  # noqa: E402
 DIRECTIONS_PATH = DATA_DIR / "refusal_directions.pt"
 
 
-def sweep_conditions(n_layers: int) -> list[Condition]:
+def sweep_conditions() -> list[Condition]:
     """The base row then one condition per layer, named as the freeze step expects."""
     return [
         Condition(id=condition_id(layer), seed=SEED, layer=layer, prompt_set="validation")
-        for layer in [None, *range(n_layers)]
+        for layer in [None, *range(N_LAYERS)]
     ]
 
 
@@ -46,7 +46,7 @@ def main(argv: list[str]) -> None:
         raise SystemExit(f"{DIRECTIONS_PATH} is missing; run scripts/extract_directions.py")
 
     directions = load_directions(DIRECTIONS_PATH)
-    conditions = sweep_conditions(len(directions))
+    conditions = sweep_conditions()
     print(f"{len(conditions)} conditions over the validation set at k=1")
 
     model, tokenizer = load_model()

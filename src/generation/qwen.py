@@ -40,6 +40,7 @@ from types import MappingProxyType
 
 MODEL_ID = "Qwen/Qwen3-4B"
 REVISION = "1cfa9a7208912126459214e8b04321603b3df60c"
+N_LAYERS = 36
 
 # Every decoding parameter, as one object. Read-only: mutating these mid-run would
 # silently change the text produced for every condition that follows.

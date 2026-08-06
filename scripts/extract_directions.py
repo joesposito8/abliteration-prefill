@@ -22,7 +22,7 @@ from abliteration import (  # noqa: E402
     save_directions,
 )
 from abliteration.edit import target_matrices  # noqa: E402
-from generation.qwen import load_model  # noqa: E402
+from generation.qwen import N_LAYERS, load_model  # noqa: E402
 from study.datasets import (  # noqa: E402
     DATA_DIR,
     FREEZE_MANIFEST_JSON,
@@ -40,7 +40,7 @@ PADDING_CHECK_PROMPTS = 16  # P1 needs one unbatched forward per prompt; 16 show
 def check_structure(model) -> None:
     """The one check the unit tests cannot make: they run against a 3-layer stub."""
     found = len(list(target_matrices(model)))
-    expected = 1 + 2 * model.config.num_hidden_layers
+    expected = 1 + 2 * N_LAYERS
     if found != expected:
         raise SystemExit(f"expected {expected} target matrices, found {found}")
 
