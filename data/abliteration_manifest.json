@@ -1,0 +1,23 @@
+{
+  "directions": {
+    "file": "refusal_directions.pt",
+    "sha256": "d06e9c5c6b3f235de850d381c1878fabb0462c53118b1aa233e60e24e0fd50dc"
+  },
+  "primary": {
+    "band": [
+      "layer_23",
+      "layer_20"
+    ],
+    "condition": "layer_23",
+    "layer": 23,
+    "rule_path": [
+      "breadth",
+      "quality"
+    ],
+    "runner_up": "layer_20"
+  },
+  "table": {
+    "file": "layer_selection.csv",
+    "sha256": "b1566fd016de05f1aac206b1707a8de6502572cd58d05a7c495a28a2af8de1e8"
+  }
+}
