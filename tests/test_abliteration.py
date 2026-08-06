@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import pytest
 
+from conftest import needs_torch
+
 try:
     import torch
-
-    HAS_TORCH = True
-except ImportError:
-    HAS_TORCH = False
-
-needs_torch = pytest.mark.skipif(not HAS_TORCH, reason="torch not installed")
+except ImportError:  # every test that uses it is skipped
+    pass
 
 
 def _stub_model(n_layers=3, d_model=8, d_attn=12, d_ff=16, vocab=20, *, tie=True):

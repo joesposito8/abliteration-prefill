@@ -11,28 +11,20 @@ from types import SimpleNamespace
 
 import extract_directions as extract
 import pytest
+from generation.qwen import N_LAYERS
 from study.datasets import DATA_DIR
+
+from conftest import needs_torch
 
 try:
     import torch
-
-    HAS_TORCH = True
-except ImportError:
-    HAS_TORCH = False
-
-needs_torch = pytest.mark.skipif(not HAS_TORCH, reason="torch not installed")
-
-N_LAYERS = 36
+except ImportError:  # every test that uses it is skipped
+    pass
 
 
-def _model(n_layers=N_LAYERS, targets=None):
-    """Only what check_structure reads: a target count and a declared layer count."""
-    if targets is None:
-        targets = 1 + 2 * n_layers
-    return SimpleNamespace(
-        config=SimpleNamespace(num_hidden_layers=n_layers),
-        _targets=[object()] * targets,
-    )
+def _model(targets=1 + 2 * N_LAYERS):
+    """Only what check_structure reads: how many matrices target_matrices yields."""
+    return SimpleNamespace(_targets=[object()] * targets)
 
 
 @pytest.fixture(autouse=True)

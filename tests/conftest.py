@@ -6,7 +6,9 @@ pass, and torch itself.
 
 from __future__ import annotations
 
+import operator
 import sys
+from types import SimpleNamespace
 
 import pytest
 from generation.qwen import DECODING, THINKING_SENTINEL, Continuation
@@ -154,3 +156,45 @@ class FakeJudge:
 def fake_judge():
     """Stands in for the rubric grader, which is an API call away."""
     return FakeJudge
+
+
+# --- the weight edit, which needs torch and a real model -------------------
+
+try:
+    import torch  # noqa: F401
+
+    HAS_TORCH = True
+except ImportError:
+    HAS_TORCH = False
+
+needs_torch = pytest.mark.skipif(not HAS_TORCH, reason="torch not installed")
+
+# The real edit spans 73 matrices; a snapshot and a verify have to cover all of them.
+MATRICES = 3
+
+
+class Weights:
+    """A module whose whole content is the edits currently applied to it."""
+
+    def __init__(self) -> None:
+        self.edits: list[int] = []
+
+
+@pytest.fixture
+def weights(monkeypatch) -> Weights:
+    """Stands in for the tensor operations run_sweep brackets each condition with."""
+    module = Weights()
+    monkeypatch.setattr(
+        "harness.run.snapshot_targets", lambda m: [tuple(m.edits)] * MATRICES
+    )
+    monkeypatch.setattr("harness.run.orthogonalize_", lambda m, r: m.edits.append(r))
+    monkeypatch.setattr(
+        "harness.run.restore_targets",
+        lambda m, base: m.edits.__setitem__(slice(None), base[0]),
+    )
+    monkeypatch.setattr(
+        "harness.run.target_matrices",
+        lambda m: [(SimpleNamespace(data=tuple(m.edits)), 0)] * MATRICES,
+    )
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(equal=operator.eq))
+    return module

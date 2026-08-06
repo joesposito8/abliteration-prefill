@@ -29,17 +29,15 @@ from inspect_ai.log import (  # noqa: E402
 )
 
 
-def finished_logs(root: Path) -> list:
-    """The successful log of every condition under ``root``.
+def finished_logs(root: Path) -> list[EvalLog]:
+    """The successful log header of every condition under ``root``.
 
     A failed or killed attempt stays in its directory, so the tree cannot be scanned
-    without asking each log how it ended.
+    without asking each log how it ended — and the header that answers is returned rather
+    than dropped, so a caller reading the results need not open the file again.
     """
-    return [
-        info
-        for info in list_eval_logs(str(root))
-        if read_eval_log(info, header_only=True).status == "success"
-    ]
+    headers = (read_eval_log(info, header_only=True) for info in list_eval_logs(str(root)))
+    return [log for log in headers if log.status == "success"]
 
 
 def grade_log(source: Path, output: Path) -> EvalLog:
@@ -59,8 +57,8 @@ def grade_log(source: Path, output: Path) -> EvalLog:
 def grade_sweep(source_root: Path, output_root: Path) -> list[EvalLog]:
     """Grade every finished condition into a mirror of its tree."""
     scored = []
-    for info in finished_logs(source_root):
-        source = _local(info.name)
+    for log in finished_logs(source_root):
+        source = _local(log.location)
         output = output_root / source.relative_to(source_root)
         output.parent.mkdir(parents=True, exist_ok=True)
         scored.append(grade_log(source, output))

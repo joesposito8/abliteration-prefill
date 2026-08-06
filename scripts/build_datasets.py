@@ -70,8 +70,6 @@ N_VALIDATION = 72
 N_HARMLESS = 128
 N_PILOT = 30
 
-# The HarmBench-derived files carry the eval-set columns plus their own key, so the
-# 200-row parent and the two splits cut from it are one table in three files.
 HARMBENCH_SOURCE = "harmbench_standard"
 COLS_HARMFUL = ["prompt_id", "behavior_id", "category", "source", "forbidden_prompt"]
 

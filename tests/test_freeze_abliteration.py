@@ -16,7 +16,14 @@ import freeze_abliteration as freeze
 import grade
 import pandas as pd
 import pytest
-from abliteration.selection import LayerReport, condition_id, near_tie_band, select_primary
+from abliteration.selection import (
+    LayerReport,
+    condition_id,
+    near_tie_band,
+    select_primary,
+    sweep_layers,
+)
+from generation.qwen import N_LAYERS
 from harness.conditions import Condition
 from harness.dataset import build_dataset
 from harness.run import run_condition
@@ -27,7 +34,6 @@ SEED = 20260803
 
 UNLOCK = "1.b 0\n2.b 4\n3.b 5"
 UNLOCK_AGGREGATE = 0.875
-
 
 
 def _profile(layer: int | None) -> tuple[int, int]:
@@ -41,9 +47,9 @@ def _profile(layer: int | None) -> tuple[int, int]:
     return 4, 1
 
 
-def _header(condition, *, unlocked, malformed=0, degenerate=0, aggregate=0.5,
-            completed=N, total=N, results=True):
-    """A log header carrying only what the freeze step reads."""
+def _header(*, unlocked, malformed=0, degenerate=0, aggregate=0.5, completed=N,
+            results=True):
+    """A log header carrying only what assert_complete and build_reports read."""
     values = {
         "unlocked": unlocked / N,
         # Non-unlocked rows score exactly 0, so the all-prompts mean is scaled by breadth.
@@ -52,14 +58,9 @@ def _header(condition, *, unlocked, malformed=0, degenerate=0, aggregate=0.5,
         "degenerate": degenerate / N,
     }
     return SimpleNamespace(
-        eval=SimpleNamespace(
-            model=f"qwen-local/{condition}",
-            task_args={"seed": SEED},
-            metadata={"prompt_set_sha256": "a" * 64},
-        ),
         results=SimpleNamespace(
             completed_samples=completed,
-            total_samples=total,
+            total_samples=N,
             scores=[
                 SimpleNamespace(name=key, metrics={"per_slot_all": SimpleNamespace(value=v)})
                 for key, v in values.items()
@@ -70,11 +71,9 @@ def _header(condition, *, unlocked, malformed=0, degenerate=0, aggregate=0.5,
 
 def _sweep(**overrides) -> dict:
     sweep = {}
-    for layer in [None, *range(36)]:
+    for layer in sweep_layers(N_LAYERS):
         unlocked, malformed = _profile(layer)
-        sweep[condition_id(layer)] = _header(
-            condition_id(layer), unlocked=unlocked, malformed=malformed
-        )
+        sweep[condition_id(layer)] = _header(unlocked=unlocked, malformed=malformed)
     return sweep | overrides
 
 
@@ -177,7 +176,7 @@ def test_a_missing_layer_fails_loudly(sweep):
 
 
 def test_an_unexpected_condition_fails_loudly(sweep):
-    sweep["layer_36"] = _header("layer_36", unlocked=N)
+    sweep["layer_36"] = _header(unlocked=N)
 
     with pytest.raises(SystemExit, match="unexpected conditions"):
         freeze.assert_complete(sweep, N)
@@ -185,7 +184,7 @@ def test_an_unexpected_condition_fails_loudly(sweep):
 
 def test_a_condition_that_lost_samples_fails_loudly(sweep):
     """A run that loses samples still reports success, so the count is the check."""
-    sweep["layer_11"] = _header("layer_11", unlocked=4, completed=N - 2)
+    sweep["layer_11"] = _header(unlocked=4, completed=N - 2)
 
     with pytest.raises(SystemExit, match="completed, expected"):
         freeze.assert_complete(sweep, N)
@@ -194,7 +193,7 @@ def test_a_condition_that_lost_samples_fails_loudly(sweep):
 def test_a_condition_with_no_results_fails_loudly(sweep):
     """Nothing completed leaves results None outright, which would otherwise raise
     AttributeError halfway through the check."""
-    sweep["layer_11"] = _header("layer_11", unlocked=0, results=False)
+    sweep["layer_11"] = _header(unlocked=0, results=False)
 
     with pytest.raises(SystemExit, match="no results"):
         freeze.assert_complete(sweep, N)
@@ -229,8 +228,8 @@ def test_quality_denominator_does_not_favour_the_narrower_layer():
     """On an unlocked-only mean the narrower layer wins; the all-prompts denominator is
     what removes that bias, and it is the column the tie-break reads."""
     sweep = _sweep(
-        layer_01=_header("layer_01", unlocked=7, aggregate=0.62),
-        layer_02=_header("layer_02", unlocked=6, aggregate=0.63),
+        layer_01=_header(unlocked=7, aggregate=0.62),
+        layer_02=_header(unlocked=6, aggregate=0.63),
     )
     a, b = (next(r for r in freeze.build_reports(sweep, N) if r.condition == c)
             for c in ("layer_01", "layer_02"))
@@ -246,7 +245,7 @@ def test_a_layer_with_no_unlocks_has_no_unlocked_mean(reports):
 def test_the_primary_comes_from_the_band_on_quality():
     """Layers 5..29 all unlock everything; the tie-break is what separates them."""
     reports = freeze.build_reports(
-        _sweep(layer_20=_header("layer_20", unlocked=N, aggregate=0.9)), N
+        _sweep(layer_20=_header(unlocked=N, aggregate=0.9)), N
     )
     selection = select_primary(reports)
 
@@ -300,7 +299,9 @@ def test_the_manifest_records_the_choice_and_what_makes_it_meaningful(reports, m
     monkeypatch.setattr(freeze, "sha256_file", lambda path: "e" * 64)
     selection = select_primary(reports)
 
-    manifest = freeze.build_manifest(selection, "d" * 64)
+    manifest = freeze.build_manifest(
+        selection, Path("layer_selection.csv"), "d" * 64, Path("refusal_directions.pt")
+    )
 
     assert manifest == {
         "primary": {
@@ -336,7 +337,7 @@ def test_the_report_names_the_band_and_the_rules_that_narrowed_it(reports, capsy
 
 def test_a_degrading_layer_is_flagged_for_the_operator(capsys):
     reports = freeze.build_reports(
-        _sweep(layer_31=_header("layer_31", unlocked=2, degenerate=5)), N
+        _sweep(layer_31=_header(unlocked=2, degenerate=5)), N
     )
 
     assert "HIGH DEGENERATE RATE" in _report_output(reports, capsys)

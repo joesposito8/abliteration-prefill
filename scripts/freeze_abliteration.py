@@ -31,6 +31,7 @@ from abliteration.selection import (  # noqa: E402
     rank,
     select_primary,
     selectable,
+    sweep_layers,
 )
 from generation.qwen import N_LAYERS  # noqa: E402
 from grading.strongreject_grader import JUDGE_MODEL  # noqa: E402
@@ -38,6 +39,7 @@ from harness.conditions import PROVIDER  # noqa: E402
 from inspect_ai.log import read_eval_log  # noqa: E402
 from study.datasets import (  # noqa: E402
     DATA_DIR,
+    REFUSAL_DIRECTIONS_PT,
     VALIDATION_HARMFUL_CSV,
     load_validation_prompts,
 )
@@ -47,7 +49,6 @@ from grade import finished_logs  # noqa: E402
 
 TABLE_PATH = DATA_DIR / "layer_selection.csv"
 MANIFEST_PATH = DATA_DIR / "abliteration_manifest.json"
-DIRECTIONS_PATH = DATA_DIR / "refusal_directions.pt"
 SCORER = "strongreject"
 
 
@@ -62,8 +63,7 @@ def load_conditions(root: Path) -> dict:
         raise SystemExit(f"no successful eval logs under {root}")
 
     by_condition: dict = {}
-    for info in logs:
-        log = read_eval_log(info, header_only=True)
+    for log in logs:
         condition = log.eval.model.removeprefix(f"{PROVIDER}/")
         if condition in by_condition:
             raise SystemExit(f"{condition}: two successful logs; the tree is ambiguous")
@@ -73,7 +73,7 @@ def load_conditions(root: Path) -> dict:
 
 def assert_complete(by_condition: dict, n_prompts: int) -> None:
     """Prove every condition ran every prompt before anything is ranked."""
-    expected = [condition_id(layer) for layer in [None, *range(N_LAYERS)]]
+    expected = [condition_id(layer) for layer in sweep_layers(N_LAYERS)]
 
     missing = [c for c in expected if c not in by_condition]
     if missing:
@@ -105,12 +105,12 @@ def metric(log, key: str) -> float:
 def build_reports(by_condition: dict, n_prompts: int) -> list[LayerReport]:
     """The base row then every layer. The loop supplies the layer, so no id is parsed."""
     reports = []
-    for layer in [None, *range(N_LAYERS)]:
+    for layer in sweep_layers(N_LAYERS):
         log = by_condition[condition_id(layer)]
-        breadth, quality, malformed, degenerate = (
-            metric(log, key)
-            for key in ("unlocked", "aggregate", "malformed", "degenerate")
-        )
+        breadth = metric(log, "unlocked")
+        quality = metric(log, "aggregate")
+        malformed = metric(log, "malformed")
+        degenerate = metric(log, "degenerate")
         reports.append(
             LayerReport(
                 condition=condition_id(layer),
@@ -153,7 +153,7 @@ def write_table(path: Path, frame: pd.DataFrame) -> str:
     return sha256_file(path)
 
 
-def build_manifest(selection, table_sha256: str) -> dict:
+def build_manifest(selection, table: Path, table_sha256: str, directions: Path) -> dict:
     """The choice, and the two files it is only meaningful against.
 
     A layer index means nothing without the direction tensor it indexes into: a different
@@ -167,11 +167,8 @@ def build_manifest(selection, table_sha256: str) -> dict:
             "band": list(selection.band),
             "runner_up": selection.runner_up,
         },
-        "directions": {
-            "file": DIRECTIONS_PATH.name,
-            "sha256": sha256_file(DIRECTIONS_PATH),
-        },
-        "table": {"file": TABLE_PATH.name, "sha256": table_sha256},
+        "directions": {"file": directions.name, "sha256": sha256_file(directions)},
+        "table": {"file": table.name, "sha256": table_sha256},
     }
 
 
@@ -261,10 +258,12 @@ def main() -> None:
         print("\nnothing written. re-run with --write to commit.")
         return
 
-    if not DIRECTIONS_PATH.exists():
-        raise SystemExit(f"{DIRECTIONS_PATH} is missing; the layer index would name nothing")
+    if not REFUSAL_DIRECTIONS_PT.exists():
+        raise SystemExit(f"{REFUSAL_DIRECTIONS_PT} is missing; the layer index would name nothing")
 
-    manifest = build_manifest(selection, write_table(TABLE_PATH, table))
+    manifest = build_manifest(
+        selection, TABLE_PATH, write_table(TABLE_PATH, table), REFUSAL_DIRECTIONS_PT
+    )
     write_manifest(MANIFEST_PATH, manifest)
     print(f"\nwrote {TABLE_PATH}\nwrote {MANIFEST_PATH}")
     print(f"  primary: {selection.condition} via {' -> '.join(selection.rule_path)}")

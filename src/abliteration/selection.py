@@ -19,6 +19,11 @@ def condition_id(layer: int | None) -> str:
     return BASE_CONDITION if layer is None else f"layer_{layer:02d}"
 
 
+def sweep_layers(n_layers: int) -> list[int | None]:
+    """The base row then every layer, in the order both the sweep and the rule walk it."""
+    return [None, *range(n_layers)]
+
+
 @dataclass(frozen=True)
 class LayerReport:
     condition: str

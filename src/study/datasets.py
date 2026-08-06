@@ -20,6 +20,7 @@ VALIDATION_HARMFUL_CSV = DATA_DIR / "validation_harmful.csv"
 EXTRACTION_HARMLESS_CSV = DATA_DIR / "extraction_harmless.csv"
 PILOT_PROMPTS_CSV = DATA_DIR / "pilot_prompts.csv"
 FREEZE_MANIFEST_JSON = DATA_DIR / "freeze_manifest.json"
+REFUSAL_DIRECTIONS_PT = DATA_DIR / "refusal_directions.pt"
 
 
 # --- canonical seeded draws ------------------------------------------------

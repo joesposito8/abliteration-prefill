@@ -7,12 +7,10 @@ GPU bill partway through a metered run.
 
 from __future__ import annotations
 
-import operator
 import subprocess
 import sys
 import textwrap
 import time
-from types import SimpleNamespace
 
 import pytest
 from harness.batching import BATCH
@@ -163,36 +161,6 @@ def test_exactly_one_log_reports_success(
 DIRECTIONS = list(range(40))
 
 
-class Weights:
-    """A module whose whole content is the edits currently applied to it."""
-
-    def __init__(self) -> None:
-        self.edits: list[int] = []
-
-
-# The real edit spans 73 matrices; a snapshot and a verify have to cover all of them.
-MATRICES = 3
-
-
-@pytest.fixture
-def weights(monkeypatch, fake_generate_prompts) -> Weights:
-    """Stands in for the tensor operations, which need torch and a real model."""
-    module = Weights()
-    monkeypatch.setattr(
-        "harness.run.snapshot_targets", lambda m: [tuple(m.edits)] * MATRICES
-    )
-    monkeypatch.setattr("harness.run.orthogonalize_", lambda m, r: m.edits.append(r))
-    monkeypatch.setattr(
-        "harness.run.restore_targets",
-        lambda m, base: m.edits.__setitem__(slice(None), base[0]),
-    )
-    monkeypatch.setattr(
-        "harness.run.target_matrices",
-        lambda m: [(SimpleNamespace(data=tuple(m.edits)), 0)] * MATRICES,
-    )
-    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(equal=operator.eq))
-    return module
-
 
 @pytest.fixture
 def edits_when_generating(
@@ -311,7 +279,7 @@ CHILD = """
 import sys, time
 from pathlib import Path
 sys.path[:0] = ["src", "tests"]
-from conftest import FakeTokenizer
+from conftest import Weights, FakeTokenizer
 from generation.qwen import Continuation
 from harness.conditions import Condition
 from harness.dataset import build_dataset

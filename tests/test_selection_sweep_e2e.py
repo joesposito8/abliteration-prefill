@@ -11,14 +11,11 @@ Only the two things that need hardware are faked: the forward pass and the judge
 from __future__ import annotations
 
 import json
-import operator
-import sys
-from types import SimpleNamespace
 
 import freeze_abliteration as freeze
 import grade
 import pytest
-from abliteration.selection import condition_id
+from abliteration.selection import condition_id, sweep_layers
 from harness.conditions import Condition
 from harness.run import run_sweep
 from inspect_ai.dataset import MemoryDataset
@@ -29,43 +26,13 @@ PROMPTS = 3
 UNLOCK = "1.b 0\n2.b 4\n3.b 5"
 
 DIRECTIONS = list(range(N_LAYERS))
-MATRICES = 3  # the real edit spans 73; a snapshot and a verify have to cover all of them
-
-
-class Weights:
-    """A module whose whole content is the edits currently applied to it."""
-
-    def __init__(self) -> None:
-        self.edits: list[int] = []
-
-
-@pytest.fixture
-def weights(monkeypatch) -> Weights:
-    """Stands in for the tensor operations, which need torch and a real model."""
-    module = Weights()
-    monkeypatch.setattr("harness.run.snapshot_targets", lambda m: [tuple(m.edits)] * MATRICES)
-    monkeypatch.setattr("harness.run.orthogonalize_", lambda m, r: m.edits.append(r))
-    monkeypatch.setattr(
-        "harness.run.restore_targets",
-        lambda m, base: m.edits.__setitem__(slice(None), base[0]),
-    )
-    monkeypatch.setattr(
-        "harness.run.target_matrices",
-        lambda m: [(SimpleNamespace(data=tuple(m.edits)), 0)] * MATRICES,
-    )
-    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(equal=operator.eq))
-    return module
 
 
 @pytest.fixture
 def small_sweep(monkeypatch, tmp_path, prefills):
     """Two layers instead of 36 and three prompts instead of 72, everything else real."""
     monkeypatch.setattr(freeze, "N_LAYERS", N_LAYERS)
-    monkeypatch.setattr(freeze, "TABLE_PATH", tmp_path / "layer_selection.csv")
-    monkeypatch.setattr(freeze, "MANIFEST_PATH", tmp_path / "abliteration_manifest.json")
-    directions_file = tmp_path / "refusal_directions.pt"
-    directions_file.write_bytes(b"stands in for the tensor the manifest pins")
-    monkeypatch.setattr(freeze, "DIRECTIONS_PATH", directions_file)
+    (tmp_path / "refusal_directions.pt").write_bytes(b"stands in for the tensor pinned")
 
     from harness.dataset import build_dataset
 
@@ -83,7 +50,7 @@ def frozen(monkeypatch, small_sweep, weights, tokenizer, fake_judge, fake_genera
     """Generate every condition, grade it, then apply the rule — the operator's path."""
     conditions = [
         Condition(id=condition_id(layer), seed=SEED, layer=layer, prompt_set="validation")
-        for layer in [None, *range(N_LAYERS)]
+        for layer in sweep_layers(N_LAYERS)
     ]
     run_sweep(
         conditions, {}, module=weights, tokenizer=tokenizer,
@@ -115,14 +82,17 @@ def test_the_rule_selects_a_primary_from_the_graded_sweep(frozen):
     assert selection.rule_path == ("breadth", "layer_index")
 
 
-def test_the_committed_artifacts_are_written_and_agree(frozen):
+def test_the_committed_artifacts_are_written_and_agree(frozen, small_sweep):
     reports, selection = frozen
-    table = freeze.build_table(reports, selection)
-    table_sha = freeze.write_table(freeze.TABLE_PATH, table)
-    freeze.write_manifest(freeze.MANIFEST_PATH, freeze.build_manifest(selection, table_sha))
+    table_path = small_sweep / "layer_selection.csv"
+    manifest_path = small_sweep / "abliteration_manifest.json"
 
-    manifest = json.loads(freeze.MANIFEST_PATH.read_text())
+    table_sha = freeze.write_table(table_path, freeze.build_table(reports, selection))
+    freeze.write_manifest(manifest_path, freeze.build_manifest(
+        selection, table_path, table_sha, small_sweep / "refusal_directions.pt"
+    ))
+    manifest = json.loads(manifest_path.read_text())
 
     assert manifest["primary"]["condition"] == selection.condition
     assert manifest["table"]["sha256"] == table_sha
-    assert len(freeze.TABLE_PATH.read_text().splitlines()) == 1 + len(reports)
+    assert len(table_path.read_text().splitlines()) == 1 + len(reports)

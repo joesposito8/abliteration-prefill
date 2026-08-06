@@ -16,10 +16,10 @@ from abliteration.selection import (
 N = 72
 
 
-def _report(layer, unlocked, *, quality=0.5, n=N):
+def _report(layer, unlocked, *, quality=0.5):
     return LayerReport(
-        condition=condition_id(layer), layer=layer, n_prompts=n,
-        n_unlocked=unlocked, breadth=unlocked / n, quality=quality,
+        condition=condition_id(layer), layer=layer, n_prompts=N,
+        n_unlocked=unlocked, breadth=unlocked / N, quality=quality,
         n_malformed=0, malformed_rate=0.0, n_degenerate=0, degenerate_rate=0.0,
         quality_unlocked=quality,
     )

@@ -26,12 +26,12 @@ from generation.qwen import N_LAYERS, load_model  # noqa: E402
 from study.datasets import (  # noqa: E402
     DATA_DIR,
     FREEZE_MANIFEST_JSON,
+    REFUSAL_DIRECTIONS_PT,
     load_extraction_harmful,
     load_extraction_harmless,
 )
 from study.manifest import sha256_file, write_manifest  # noqa: E402
 
-DIRECTIONS_PATH = DATA_DIR / "refusal_directions.pt"
 DIRECTIONS_JSON = DATA_DIR / "directions.json"
 BATCH = 32
 PADDING_CHECK_PROMPTS = 16  # P1 needs one unbatched forward per prompt; 16 shows the same
@@ -101,17 +101,19 @@ def main() -> None:
 
     directions = extract(model, tokenizer, harmful, harmless)
     check_directions(directions)
+    sha256 = save_directions(directions, REFUSAL_DIRECTIONS_PT)
+
     padding = padding_cosine(model, tokenizer, harmful[:PADDING_CHECK_PROMPTS])
     split_half = split_half_cosines(model, tokenizer, harmful, harmless)
 
     # Only the cosines: the tensor hash identifies what they describe, and everything
     # else about this run is in the freeze manifest or derivable from the model.
     write_manifest(DIRECTIONS_JSON, {
-        "sha256": save_directions(directions, DIRECTIONS_PATH),
+        "sha256": sha256,
         "padding_cosine_min": padding,
         "split_half_cosine": split_half,
     })
-    print(f"wrote {DIRECTIONS_PATH}\nwrote {DIRECTIONS_JSON}")
+    print(f"wrote {REFUSAL_DIRECTIONS_PT}\nwrote {DIRECTIONS_JSON}")
     print(f"  padding cosine (min over layers): {padding:.6f}")
     print(f"  split-half cosine: min {min(split_half):.3f} at layer {split_half.index(min(split_half))}")
 
