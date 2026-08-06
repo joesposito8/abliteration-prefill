@@ -16,6 +16,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
+from study.datasets import PORTFOLIO_MANIFEST_JSON  # noqa: E402
 from study.manifest import (  # noqa: E402
     rollup_sha256,
     sha256_bytes,
@@ -37,8 +38,6 @@ from prefills import (  # noqa: E402
     VARIANTS_PER_FAMILY,
     strategy_path,
 )
-
-MANIFEST_PATH = REPO / "data" / "portfolio_manifest.json"
 
 # Frozen source files whose bytes the portfolio hash pins, beyond the six prompts.
 CODE_FILES = ("rules.py", "families.py", "__init__.py")
@@ -86,8 +85,8 @@ def build_manifest() -> dict:
 
 def main() -> None:
     manifest = build_manifest()
-    write_manifest(MANIFEST_PATH, manifest)
-    print(f"froze portfolio -> {MANIFEST_PATH}")
+    write_manifest(PORTFOLIO_MANIFEST_JSON, manifest)
+    print(f"froze portfolio -> {PORTFOLIO_MANIFEST_JSON}")
     print(f"  portfolio_sha256: {manifest['portfolio_sha256']}")
     for fam in manifest["families"]:
         print(f"  {fam['id']:22s} {fam['sha256'][:16]}…")

@@ -12,12 +12,10 @@ from __future__ import annotations
 import json
 
 from generation.qwen import MODEL_ID, REVISION
-from study.datasets import DATA_DIR
+from study.datasets import PORTFOLIO_MANIFEST_JSON
 from study.manifest import sha256_file
 
 from .dataset import EVAL_SETS
-
-PORTFOLIO_MANIFEST_JSON = DATA_DIR / "portfolio_manifest.json"
 
 
 def run_metadata(prompt_set: str) -> dict:

@@ -1,0 +1,47 @@
+{
+  "counts": {
+    "batches": 2498,
+    "generations_per_prompt": 507,
+    "prompts": 313,
+    "rows": 158691
+  },
+  "gen_config": {
+    "decoding": {
+      "do_sample": true,
+      "max_new_tokens": 1024,
+      "min_p": 0.0,
+      "temperature": 0.7,
+      "top_k": 20,
+      "top_p": 0.8
+    },
+    "model": "Qwen/Qwen3-4B",
+    "revision": "1cfa9a7208912126459214e8b04321603b3df60c"
+  },
+  "gen_config_hash": "218f9905d9c077b9c303bbe378beb93664600d630303ec2e56298dfc4121e38e",
+  "inputs": {
+    "abliteration_manifest.json": "fa9e77177720de4d2f53fc45fcbcc33cdc7e6eaf6a9d3c2c3b6c087a8a7ab380",
+    "portfolio_manifest.json": "f8da77e15ec89622802b9e2146830d2eabdf3abb35438cb81df5d499cee69043",
+    "strongreject_dataset.csv": "4dd70357e4ff8b5d0ba5ebafecab5d6dd5633ce8046e3dd1c8bd93e64de44381"
+  },
+  "order": "condition (base, layer_00..layer_35) -> arm (unprefilled, then prefilled) -> prefill_id (portfolio order) -> prompt_id ascending -> replicate_id ascending. The unprefilled arm matches harness.dataset.build_dataset row for row; the prefilled arm is slot-major where build_dataset is prompt-major, so that one declared batch carries one prefill",
+  "partition": {
+    "key": [
+      "condition",
+      "prefill_id"
+    ],
+    "rule": "consecutive rows of each group in manifest order; the last batch of a group carries the remainder",
+    "scope": "a declared plan, not an observation: harness.batching composes a batch from whatever arrives while the previous one holds the GPU, so the batch a row actually ran in is the one its log records through batch_seed, batch_size and batch_position",
+    "width": 64
+  },
+  "primary": {
+    "condition": "layer_23",
+    "layer": 23
+  },
+  "run_sha256": "c450c315c7e9789466039f9d45a3b2bf998b6bd32d61f641c869ed747515f226",
+  "seed": 20260724,
+  "seed_scope": "one project-wide seed on every row; the per-forward-pass RNG stream is generation.qwen.batch_seed(seed, prompts), so every batch samples independently and matching batches of different conditions share a stream",
+  "table": {
+    "file": "run_manifest.csv",
+    "sha256": "f8c725aa15654ae61f0fda29b5a98d2481f9a132d911d0474d8ac2901170bcca"
+  }
+}

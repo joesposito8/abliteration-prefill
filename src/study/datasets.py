@@ -20,6 +20,10 @@ VALIDATION_HARMFUL_CSV = DATA_DIR / "validation_harmful.csv"
 EXTRACTION_HARMLESS_CSV = DATA_DIR / "extraction_harmless.csv"
 PILOT_PROMPTS_CSV = DATA_DIR / "pilot_prompts.csv"
 FREEZE_MANIFEST_JSON = DATA_DIR / "freeze_manifest.json"
+ABLITERATION_MANIFEST_JSON = DATA_DIR / "abliteration_manifest.json"
+PORTFOLIO_MANIFEST_JSON = DATA_DIR / "portfolio_manifest.json"
+RUN_MANIFEST_CSV = DATA_DIR / "run_manifest.csv"
+RUN_MANIFEST_JSON = DATA_DIR / "run_manifest.json"
 REFUSAL_DIRECTIONS_PT = DATA_DIR / "refusal_directions.pt"
 
 

@@ -187,6 +187,29 @@ layer, terminal-only. `--write` commits `data/layer_selection.csv` and
 `data/abliteration_manifest.json`. Definitions and the method behind every column:
 `data/SOURCES.md`.
 
+## Run manifest
+
+The main comparison's work list, frozen before any of it runs:
+
+```bash
+uv run python scripts/build_run_manifest.py    # writes data/run_manifest.{csv,json}
+```
+
+One row per generation — 313 evaluation prompts x 507 generations = 158,691 — keyed by
+prompt, condition, prefill and replicate. 507 per prompt is 37 unprefilled conditions at
+13 replicates, plus a portfolio slot each on the two conditions that carry a prefilled
+arm: the unedited base, and the primary the selection sweep chose. The count is asserted
+against the preregistered workload, and every cell against being enumerated twice, so a
+malformed work list is caught here rather than on a rented GPU. A rebuild that changes the
+table aborts instead of re-freezing it.
+
+`batch_id` and `batch_size` partition that list at the frozen batch width, keyed by
+condition and prefill, because one forward pass holds one weight edit and one prefill and
+the last batch of each group takes the remainder. It is a **declared plan, not an
+observation**: `src/harness/batching.py` fills a batch from whatever arrives while the
+previous one holds the GPU, so the batch a row actually ran in is the one its log records
+through `batch_seed`, `batch_size` and `batch_position`.
+
 ## Evaluation
 
 _TODO — run the prefilling-vs-abliteration comparison and analyze coverage._
