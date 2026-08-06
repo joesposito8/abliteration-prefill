@@ -43,7 +43,8 @@ class Selection:
     runner_up: str | None
 
 
-def _rank(reports: Sequence[LayerReport]) -> list[LayerReport]:
+def rank(reports: Sequence[LayerReport]) -> list[LayerReport]:
+    """Breadth, then quality, then layer index — the order the tie-break walks."""
     return sorted(reports, key=lambda r: (-r.n_unlocked, -r.quality, r.layer))
 
 
@@ -58,7 +59,7 @@ def near_tie_band(reports: Sequence[LayerReport]) -> list[LayerReport]:
     if not candidates:
         raise ValueError("no layer to select from")
     best = max(r.n_unlocked for r in candidates)
-    return _rank([r for r in candidates if r.n_unlocked >= best - NEAR_TIE_PROMPTS])
+    return rank([r for r in candidates if r.n_unlocked >= best - NEAR_TIE_PROMPTS])
 
 
 def select_primary(reports: Sequence[LayerReport]) -> Selection:
@@ -78,7 +79,7 @@ def select_primary(reports: Sequence[LayerReport]) -> Selection:
 
     primary = min(remaining, key=lambda r: r.layer)
     runner_up = next(
-        (r.condition for r in _rank(selectable(reports)) if r.condition != primary.condition),
+        (r.condition for r in rank(selectable(reports)) if r.condition != primary.condition),
         None,
     )
     return Selection(
