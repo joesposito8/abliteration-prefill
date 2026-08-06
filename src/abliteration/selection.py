@@ -27,11 +27,11 @@ class LayerReport:
     n_unlocked: int
     breadth: float
     quality: float  # mean aggregate over all prompts — the tie-break
+    quality_unlocked: float | None  # descriptive only, not the tie-break
     n_malformed: int
     malformed_rate: float
     n_degenerate: int
     degenerate_rate: float
-    quality_unlocked: float | None  # descriptive only, not the tie-break
 
 
 @dataclass(frozen=True)

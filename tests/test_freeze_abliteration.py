@@ -8,11 +8,13 @@ be given a shape worth ranking, which 37 real conditions cannot cheaply.
 from __future__ import annotations
 
 import shutil
+from dataclasses import fields
 from pathlib import Path
 from types import SimpleNamespace
 
 import freeze_abliteration as freeze
 import grade
+import pandas as pd
 import pytest
 from abliteration.selection import LayerReport, condition_id, near_tie_band, select_primary
 from harness.conditions import Condition
@@ -26,8 +28,6 @@ SEED = 20260803
 UNLOCK = "1.b 0\n2.b 4\n3.b 5"
 UNLOCK_AGGREGATE = 0.875
 
-DIRECTIONS = {"file": "refusal_directions.pt", "sha256": "b" * 64}
-LINEAGE = {"seed": SEED, "prompt_set_sha256": "a" * 64}
 
 
 def _profile(layer: int | None) -> tuple[int, int]:
@@ -121,15 +121,6 @@ def test_the_reader_finds_the_metrics_the_rule_needs(scored_run):
     assert freeze.metric(log, "unlocked") == 1.0
     assert freeze.metric(log, "aggregate") == pytest.approx(UNLOCK_AGGREGATE)
     assert freeze.metric(log, "malformed") == freeze.metric(log, "degenerate") == 0.0
-
-
-def test_the_lineage_comes_back_off_the_header(scored_run):
-    """The manifest restates none of this; the run recorded it."""
-    lineage = freeze.read_lineage(freeze.load_conditions(scored_run())["layer_22"])
-
-    assert lineage["seed"] == SEED
-    assert len(lineage["prompt_set_sha256"]) == 64
-    assert lineage["target_model"] == "Qwen/Qwen3-4B"
 
 
 def test_a_regenerated_condition_yields_one_entry(
@@ -268,108 +259,87 @@ def test_the_primary_comes_from_the_band_on_quality():
 
 def test_the_table_has_a_row_per_condition_and_one_primary(reports):
     selection = select_primary(reports)
-    rows = freeze.build_table(reports, selection)
+    table = freeze.build_table(reports, selection)
 
-    assert len(rows) == 37
-    assert sum(row["primary"] for row in rows) == 1
-    assert [row["condition"] for row in rows if row["primary"]] == [selection.condition]
-    assert list(rows[0]) == freeze.COLUMNS
+    assert len(table) == 37
+    assert table["primary"].sum() == 1
+    assert table.loc[table["primary"] == 1, "condition"].tolist() == [selection.condition]
+    assert list(table.columns) == [f.name for f in fields(LayerReport)] + ["rank", "primary"]
 
 
 def test_the_base_row_is_ranked_out_not_dropped(reports):
-    rows = freeze.build_table(reports, select_primary(reports))
-    base = next(row for row in rows if row["condition"] == "base")
+    table = freeze.build_table(reports, select_primary(reports))
+    base = table[table["condition"] == "base"].iloc[0]
 
-    assert (base["layer"], base["rank"], base["primary"]) == ("", "", 0)
+    assert base["layer"] is pd.NA and base["rank"] is pd.NA
+    assert base["primary"] == 0
+
+
+def test_the_base_row_writes_as_an_empty_cell_not_a_zero(reports, tmp_path):
+    """`layer` 0 is a real layer, so the base row must not be indistinguishable from it."""
+    path = tmp_path / "table.csv"
+    freeze.write_table(path, freeze.build_table(reports, select_primary(reports)))
+
+    written = pd.read_csv(path)
+    assert written.loc[written["condition"] == "base", "layer"].isna().all()
+    assert written.loc[written["condition"] == "layer_00", "layer"].tolist() == [0]
 
 
 def test_the_table_is_byte_identical_on_a_rewrite(reports, tmp_path):
-    rows = freeze.build_table(reports, select_primary(reports))
+    table = freeze.build_table(reports, select_primary(reports))
 
-    first = freeze.write_table(tmp_path / "a.csv", rows)
-    second = freeze.write_table(tmp_path / "b.csv", rows)
+    first = freeze.write_table(tmp_path / "a.csv", table)
+    second = freeze.write_table(tmp_path / "b.csv", table)
 
     assert first == second
 
 
-def test_the_manifest_is_reproducible_and_change_sensitive(reports):
+def test_the_manifest_records_the_choice_and_what_makes_it_meaningful(reports, monkeypatch):
+    """A layer index names nothing without the tensor it indexes into, and every
+    per-layer number is a row of the table — so those two files are the whole record."""
+    monkeypatch.setattr(freeze, "sha256_file", lambda path: "e" * 64)
     selection = select_primary(reports)
 
-    def manifest(**overrides):
-        return freeze.build_manifest(
-            reports=reports, selection=selection,
-            table={"file": "layer_selection.csv", "sha256": "d" * 64},
-            directions=DIRECTIONS, lineage=LINEAGE,
-            hashes={"code": {}, "commit": "abc", **overrides},
-        )
+    manifest = freeze.build_manifest(selection, "d" * 64)
 
-    assert manifest() == manifest()
-    assert manifest()["abliteration_sha256"] != manifest(commit="def")["abliteration_sha256"]
-    assert manifest()["primary"]["condition"] == selection.condition
-
-
-def test_the_manifest_carries_the_run_lineage_rather_than_restating_it(reports):
-    spec = freeze.build_manifest(
-        reports=reports, selection=select_primary(reports),
-        table={"file": "t.csv", "sha256": "d" * 64},
-        directions=DIRECTIONS, lineage=LINEAGE,
-        hashes={"code": {}, "commit": "abc"},
-    )
-
-    assert spec["generation"]["seed"] == SEED
-    assert spec["generation"]["prompt_set_sha256"] == "a" * 64
-    assert spec["directions"] == DIRECTIONS
-
-
-def test_the_manifest_records_the_resolved_inspect_install(reports):
-    """The log header carries the version but never the path, so a local checkout and
-    the pinned wheel are indistinguishable from it."""
-    spec = freeze.build_manifest(
-        reports=reports, selection=select_primary(reports),
-        table={"file": "t.csv", "sha256": "d" * 64},
-        directions=DIRECTIONS, lineage=LINEAGE,
-        hashes={"code": {}, "commit": "abc"},
-    )
-
-    assert spec["harness"]["inspect_ai"] == "0.3.251"
-    assert spec["harness"]["inspect_ai_path"].endswith("inspect_ai")
-
-
-def test_the_manifest_describes_the_batching_that_actually_ran(reports):
-    from harness.batching import BATCH
-
-    spec = freeze.build_manifest(
-        reports=reports, selection=select_primary(reports),
-        table={"file": "t.csv", "sha256": "d" * 64},
-        directions=DIRECTIONS, lineage=LINEAGE,
-        hashes={"code": {}, "commit": "abc"},
-    )
-
-    assert spec["generation"]["batch_size"] == BATCH
-    assert spec["generation"]["k"] == 1
-    assert spec["decoding"]["max_new_tokens"] == 1024
+    assert manifest == {
+        "primary": {
+            "condition": selection.condition,
+            "layer": selection.layer,
+            "rule_path": list(selection.rule_path),
+            "band": list(selection.band),
+            "runner_up": selection.runner_up,
+        },
+        "directions": {"file": "refusal_directions.pt", "sha256": "e" * 64},
+        "table": {"file": "layer_selection.csv", "sha256": "d" * 64},
+    }
 
 
 # --- the operator gate -----------------------------------------------------
 
 
-def test_the_report_names_the_band_and_the_rules_that_narrowed_it(reports, capsys):
+def _report_output(reports, capsys) -> str:
     selection = select_primary(reports)
-    freeze.print_report(reports, selection, near_tie_band(reports))
+    table = freeze.build_table(reports, selection)
+    freeze.print_report(table, reports, selection, near_tie_band(reports))
+    return capsys.readouterr().out
 
-    printed = capsys.readouterr().out
+
+def test_the_report_names_the_band_and_the_rules_that_narrowed_it(reports, capsys):
+    printed = _report_output(reports, capsys)
+
     assert "NEAR-TIE BAND" in printed
-    assert "not the tie-break" in printed  # the q|unlk legend
-    assert f"PRIMARY   {selection.condition}" in printed
+    assert "not the tie-break" in printed  # the quality_unlocked legend
+    assert f"PRIMARY   {select_primary(reports).condition}" in printed
+    assert "base" in printed and "layer_35" in printed  # all 37 rows
 
 
 def test_a_degrading_layer_is_flagged_for_the_operator(capsys):
     reports = freeze.build_reports(
         _sweep(layer_31=_header("layer_31", unlocked=2, degenerate=5)), N
     )
-    freeze.print_report(reports, select_primary(reports), near_tie_band(reports))
 
-    assert "HIGH DEGENERATE RATE" in capsys.readouterr().out
+    assert "HIGH DEGENERATE RATE" in _report_output(reports, capsys)
 
 
 def _band_of_one(**overrides) -> list[LayerReport]:
