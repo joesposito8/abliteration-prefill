@@ -43,7 +43,7 @@ from study.datasets import (  # noqa: E402
     VALIDATION_HARMFUL_CSV,
     load_validation_prompts,
 )
-from study.manifest import sha256_file, write_manifest  # noqa: E402
+from study.manifest import sha256_file, write_csv, write_manifest  # noqa: E402
 
 from grade import finished_logs  # noqa: E402
 
@@ -146,11 +146,8 @@ def build_table(reports, selection) -> pd.DataFrame:
 
 
 def write_table(path: Path, frame: pd.DataFrame) -> str:
-    """Write the table deterministically; return its SHA-256."""
-    frame.to_csv(
-        path, index=False, lineterminator="\n", encoding="utf-8", float_format="%.6f"
-    )
-    return sha256_file(path)
+    """Write the table at the precision the committed file was frozen with."""
+    return write_csv(path, frame, float_format="%.6f")
 
 
 def build_manifest(selection, table: Path, table_sha256: str, directions: Path) -> dict:

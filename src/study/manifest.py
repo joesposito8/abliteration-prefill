@@ -13,6 +13,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
+
 
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
@@ -38,3 +40,15 @@ def write_manifest(path: str | Path, obj: Any) -> None:
     """Write ``obj`` as a pretty, key-sorted JSON manifest (the committed form)."""
     text = json.dumps(obj, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
     Path(path).write_text(text, encoding="utf-8")
+
+
+def write_csv(path: str | Path, frame: pd.DataFrame, float_format: str | None = None) -> str:
+    """Write ``frame`` as a CSV — no index, LF, UTF-8 — and return its SHA-256.
+
+    Every committed table is pinned by content, so the writing convention lives here
+    rather than at each freeze: the same frame must always produce the same bytes.
+    """
+    frame.to_csv(
+        path, index=False, lineterminator="\n", encoding="utf-8", float_format=float_format
+    )
+    return sha256_file(path)

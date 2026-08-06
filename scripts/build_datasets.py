@@ -33,7 +33,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
 from study import SEED  # noqa: E402
-from study.manifest import sha256_bytes, sha256_file, write_manifest  # noqa: E402
+from study.manifest import sha256_bytes, sha256_file, write_csv, write_manifest  # noqa: E402
 from study.datasets import (  # noqa: E402
     _NORMALIZERS,
     DATA_DIR,
@@ -87,12 +87,6 @@ def _fetch(url: str, expected_sha256: str) -> bytes:
     return data
 
 
-def _write_csv(df: pd.DataFrame, path: Path, columns: list[str]) -> str:
-    """Write ``df[columns]`` deterministically; return the file SHA-256."""
-    df[columns].to_csv(path, index=False, lineterminator="\n", encoding="utf-8")
-    return sha256_file(path)
-
-
 def _assert_frozen_hashes_unchanged(artifacts: dict[str, dict]) -> None:
     """Abort if a rebuild changed an already-frozen artifact.
 
@@ -141,7 +135,7 @@ def main() -> None:
         }
     )
     artifacts[HARMBENCH_STANDARD_CSV.name] = {
-        "sha256": _write_csv(behaviors, HARMBENCH_STANDARD_CSV, COLS_HARMFUL),
+        "sha256": write_csv(HARMBENCH_STANDARD_CSV, behaviors[COLS_HARMFUL]),
         "rows": len(behaviors),
     }
 
@@ -153,11 +147,11 @@ def main() -> None:
     ext_df = behaviors.iloc[ext_idx]
     val_df = behaviors.iloc[val_idx]
     artifacts[EXTRACTION_HARMFUL_CSV.name] = {
-        "sha256": _write_csv(ext_df, EXTRACTION_HARMFUL_CSV, COLS_HARMFUL),
+        "sha256": write_csv(EXTRACTION_HARMFUL_CSV, ext_df[COLS_HARMFUL]),
         "rows": len(ext_df),
     }
     artifacts[VALIDATION_HARMFUL_CSV.name] = {
-        "sha256": _write_csv(val_df, VALIDATION_HARMFUL_CSV, COLS_HARMFUL),
+        "sha256": write_csv(VALIDATION_HARMFUL_CSV, val_df[COLS_HARMFUL]),
         "rows": len(val_df),
     }
 
@@ -184,7 +178,7 @@ def main() -> None:
     )
     assert harmless_df["prompt"].is_unique and len(harmless_df) == N_HARMLESS
     artifacts[EXTRACTION_HARMLESS_CSV.name] = {
-        "sha256": _write_csv(harmless_df, EXTRACTION_HARMLESS_CSV, ["prompt", "alpaca_index"]),
+        "sha256": write_csv(EXTRACTION_HARMLESS_CSV, harmless_df[["prompt", "alpaca_index"]]),
         "rows": len(harmless_df),
     }
 
@@ -201,7 +195,7 @@ def main() -> None:
     assert len(pilot_df) == N_PILOT and pilot_df["prompt_id"].is_unique
     cols_pilot = ["prompt_id", "category", "source", "forbidden_prompt"]
     artifacts[PILOT_PROMPTS_CSV.name] = {
-        "sha256": _write_csv(pilot_df, PILOT_PROMPTS_CSV, cols_pilot),
+        "sha256": write_csv(PILOT_PROMPTS_CSV, pilot_df[cols_pilot]),
         "rows": len(pilot_df),
     }
 
