@@ -133,8 +133,6 @@ def main() -> None:
     std = std.sort_values("BehaviorID", kind="stable").reset_index(drop=True)
     assert len(std) == 200, f"expected 200 standard behaviors, got {len(std)}"
     assert std["BehaviorID"].is_unique, "BehaviorID not unique among standard behaviors"
-    # prompt_id is the row index in the canonical order just established, matching the
-    # rule StrongREJECT's prompt_id follows. The splits below inherit it.
     behaviors = pd.DataFrame(
         {
             "prompt_id": range(len(std)),
@@ -154,9 +152,6 @@ def main() -> None:
     assert set(ext_idx).isdisjoint(val_idx)
     assert sorted(ext_idx + val_idx) == list(range(200))
 
-    # The draw is a set of parent row indices, and prompt_id rides along as exactly
-    # that — so the committed files state the split rather than merely resulting from
-    # it, and disjointness is checkable without re-running the seed.
     ext_df = behaviors.iloc[ext_idx]
     val_df = behaviors.iloc[val_idx]
     artifacts[EXTRACTION_HARMFUL_CSV.name] = {

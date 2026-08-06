@@ -68,10 +68,6 @@ def verbatim_overlap(a, b, normalize: str = "none") -> int:
 
 
 # --- loaders ---------------------------------------------------------------
-#
-# Shape follows job: an eval set the model is scored on loads as a frame carrying the
-# columns a sample is built from; a contrast corpus for direction extraction loads as
-# a list of prompts, which is all it is ever read for.
 
 EVAL_SET_COLUMNS = ("prompt_id", "category", "source", "forbidden_prompt")
 
