@@ -43,11 +43,7 @@ def write_manifest(path: str | Path, obj: Any) -> None:
 
 
 def write_csv(path: str | Path, frame: pd.DataFrame, float_format: str | None = None) -> str:
-    """Write ``frame`` as a CSV — no index, LF, UTF-8 — and return its SHA-256.
-
-    Every committed table is pinned by content, so the writing convention lives here
-    rather than at each freeze: the same frame must always produce the same bytes.
-    """
+    """Write ``frame`` as a CSV — no index, LF, UTF-8 — and return its SHA-256."""
     frame.to_csv(
         path, index=False, lineterminator="\n", encoding="utf-8", float_format=float_format
     )
