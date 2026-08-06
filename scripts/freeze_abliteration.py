@@ -38,17 +38,17 @@ from grading.strongreject_grader import JUDGE_MODEL  # noqa: E402
 from harness.conditions import PROVIDER  # noqa: E402
 from inspect_ai.log import read_eval_log  # noqa: E402
 from study.datasets import (  # noqa: E402
+    ABLITERATION_MANIFEST_JSON,
     DATA_DIR,
     REFUSAL_DIRECTIONS_PT,
     VALIDATION_HARMFUL_CSV,
     load_validation_prompts,
 )
-from study.manifest import sha256_file, write_manifest  # noqa: E402
+from study.manifest import sha256_file, write_csv, write_manifest  # noqa: E402
 
 from grade import finished_logs  # noqa: E402
 
 TABLE_PATH = DATA_DIR / "layer_selection.csv"
-MANIFEST_PATH = DATA_DIR / "abliteration_manifest.json"
 SCORER = "strongreject"
 
 
@@ -146,11 +146,8 @@ def build_table(reports, selection) -> pd.DataFrame:
 
 
 def write_table(path: Path, frame: pd.DataFrame) -> str:
-    """Write the table deterministically; return its SHA-256."""
-    frame.to_csv(
-        path, index=False, lineterminator="\n", encoding="utf-8", float_format="%.6f"
-    )
-    return sha256_file(path)
+    """Write the table at the precision the committed file was frozen with."""
+    return write_csv(path, frame, float_format="%.6f")
 
 
 def build_manifest(selection, table: Path, table_sha256: str, directions: Path) -> dict:
@@ -264,8 +261,8 @@ def main() -> None:
     manifest = build_manifest(
         selection, TABLE_PATH, write_table(TABLE_PATH, table), REFUSAL_DIRECTIONS_PT
     )
-    write_manifest(MANIFEST_PATH, manifest)
-    print(f"\nwrote {TABLE_PATH}\nwrote {MANIFEST_PATH}")
+    write_manifest(ABLITERATION_MANIFEST_JSON, manifest)
+    print(f"\nwrote {TABLE_PATH}\nwrote {ABLITERATION_MANIFEST_JSON}")
     print(f"  primary: {selection.condition} via {' -> '.join(selection.rule_path)}")
 
 
