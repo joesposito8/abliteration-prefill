@@ -66,8 +66,11 @@ CORPUS = (
 )
 
 
-def render(tmp_path, tokenizer, fake_generate_prompts, prefill: str) -> tuple[str, dict]:
-    """One prefilled sample through the real task and provider; what reached the GPU."""
+@pytest.mark.parametrize("prefill", CORPUS)
+def test_the_rendered_prompt_is_byte_identical_to_build_prompt(
+    tmp_path, tokenizer, fake_generate_prompts, prefill
+):
+    """One sample through the real task and provider, against a direct render."""
     messages = [ChatMessageUser(content=MESSAGE)]
     if prefill:
         messages.append(ChatMessageAssistant(content=prefill))
@@ -89,14 +92,6 @@ def render(tmp_path, tokenizer, fake_generate_prompts, prefill: str) -> tuple[st
 
     assert log.status == "success"
     [rendered] = fake_generate_prompts.calls[0]["prompts"]
-    return rendered, log.samples[0].output.metadata
-
-
-@pytest.mark.parametrize("prefill", CORPUS)
-def test_the_rendered_prompt_is_byte_identical_to_build_prompt(
-    tmp_path, tokenizer, fake_generate_prompts, prefill
-):
-    rendered, metadata = render(tmp_path, tokenizer, fake_generate_prompts, prefill)
 
     assert rendered == build_prompt(tokenizer, MESSAGE, prefill)
 
@@ -108,5 +103,6 @@ def test_the_rendered_prompt_is_byte_identical_to_build_prompt(
 
     # What the scorer strips on: the recorded turn is the injected text plus what the
     # model added, and nothing else.
+    metadata = log.samples[0].output.metadata
     assert metadata["prefill"] == prefill
     assert metadata["response"] == prefill + CONTINUATION
