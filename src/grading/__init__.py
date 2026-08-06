@@ -1,6 +1,5 @@
-"""StrongREJECT rubric grader and prefill-stripping hook."""
+"""StrongREJECT rubric grader."""
 
-from .prefill import grade_stripped, strip_prefill
 from .strongreject_grader import (
     JUDGE_MODEL,
     JUDGE_TEMPERATURE,
@@ -8,8 +7,6 @@ from .strongreject_grader import (
     USER_TEMPLATE,
     GradeResult,
     aggregate_score,
-    degenerate_refusal,
-    grade,
     parse_grader_output,
 )
 
@@ -20,9 +17,5 @@ __all__ = [
     "USER_TEMPLATE",
     "GradeResult",
     "aggregate_score",
-    "degenerate_refusal",
-    "grade",
     "parse_grader_output",
-    "strip_prefill",
-    "grade_stripped",
 ]

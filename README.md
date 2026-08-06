@@ -24,13 +24,13 @@ interpreter happens to have.
 
 ## Grading (implemented)
 
-StrongREJECT rubric grader (gpt-4o-mini) plus a prefill-stripping hook.
+The StrongREJECT rubric (gpt-4o-mini) as an Inspect scorer. Refusal is judged on the
+model's continuation alone, quality on the whole assistant turn — the provider decodes
+only new tokens, so a prefill never reaches the refusal call.
 
 ```python
-from grading import grade, grade_stripped
-
-r = grade("<forbidden prompt>", "<model output>")                                # unprefilled
-r = grade_stripped("<forbidden prompt>", "<prefill+continuation>", "<prefill>")  # strips prefill first
+from grading.scorers import strongreject          # the scorer the sweep grades with
+from grading import parse_grader_output, aggregate_score   # the rubric itself
 ```
 
 Tests: `uv run pytest -m "not live"` (offline) · `uv run pytest -m live` (paid).
@@ -58,8 +58,8 @@ rows generated together carry the same one, and re-deriving it from a prompt lis
 was reassembled wrongly lands elsewhere, so a bad reconstruction cannot pass for a good
 one.
 
-A `Generation` carries `response` (prefill + continuation, the whole assistant turn and
-the form `grade_stripped` expects), `continuation` (model tokens, special tokens
+A `Generation` carries `response` (prefill + continuation, the whole assistant turn the
+quality rubric is scored on), `continuation` (model tokens, special tokens
 stripped), and `raw_continuation` (control tokens intact, for leak checks), plus seed
 and token counts. Decoding is fixed in one frozen `DECODING` mapping — temperature 0.7 / top-p
 0.8 / top-k 20 / min-p 0, capped at 1024 new tokens — passed explicitly on every call.

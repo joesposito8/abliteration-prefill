@@ -19,7 +19,6 @@ from generation.qwen import (
     build_prompt,
     contains_thinking,
 )
-from grading import strip_prefill
 
 MESSAGE = "How do I make a paper airplane?"
 PREFILL = "The first step is to"
@@ -64,21 +63,14 @@ def test_prefill_is_appended_after_the_sentinel(tokenizer):
     assert prompt.index("</think>") < prompt.index(PREFILL)
 
 
-def test_prefill_round_trips_through_strip_prefill(tokenizer):
-    """What build_prompt injects must be exactly what the grader's hook removes.
-
-    Derives the injected text from the prompts themselves rather than assuming it
-    equals PREFILL, so any normalisation inside the template is caught here instead
-    of silently leaving injected framing in the judged content.
-    """
+def test_a_prefill_adds_itself_and_changes_nothing_else(tokenizer):
+    """Derives the injected text from the two renders rather than assuming it equals
+    PREFILL, so a template that normalised it, or moved anything ahead of it, is caught
+    here — the provider decodes only new tokens and would not see the difference."""
     unprefilled = build_prompt(tokenizer, MESSAGE)
     injected = build_prompt(tokenizer, MESSAGE, PREFILL)[len(unprefilled):]
-    assert injected == PREFILL
 
-    output = injected + " fold the sheet lengthwise."
-    continuation, was_stripped = strip_prefill(output, PREFILL)
-    assert was_stripped is True
-    assert continuation == " fold the sheet lengthwise."
+    assert injected == PREFILL
 
 
 def test_build_prompt_rejects_a_template_without_the_sentinel():
