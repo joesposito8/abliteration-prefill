@@ -57,8 +57,8 @@ def workload(tokenizer, rows: int) -> list[str]:
     ]
 
 
-def kv_bytes_per_token(model) -> int:
-    config = model.config
+def kv_bytes_per_token(config) -> int:
+    """``config`` is the text config; a multimodal model nests one inside its own."""
     head_dim = getattr(config, "head_dim", None) or (
         config.hidden_size // config.num_attention_heads
     )
@@ -84,7 +84,7 @@ def measure(model, tokenizer, prompts: list[str], width: int) -> dict:
         "prompts_per_second": width / seconds,
         "tokens_per_second": sum(row.new_tokens for row in rows) / seconds,
         "peak_vram_gb": torch.cuda.max_memory_allocated() / 2**30,
-        "predicted_kv_gb": width * longest * kv_bytes_per_token(model) / 2**30,
+        "predicted_kv_gb": width * longest * kv_bytes_per_token(model.config) / 2**30,
     }
 
 
@@ -114,18 +114,23 @@ def parity(model, tokenizer, prompts: list[str]) -> dict:
     }
 
 
-def choose_width(measurements: list[dict]) -> tuple[int, str]:
+def choose_width(
+    measurements: list[dict],
+    *,
+    ceiling: float = VRAM_CEILING_GB,
+    tolerance: float = TOLERANCE,
+) -> tuple[int, str]:
     """The pre-stated rule: fastest that fits, then down while the loss stays small.
 
     Smaller is preferred at equal speed because a failed batch re-runs that many
     samples, and ``max_samples`` is twice the width.
     """
-    eligible = [m for m in measurements if m["peak_vram_gb"] <= VRAM_CEILING_GB]
+    eligible = [m for m in measurements if m["peak_vram_gb"] <= ceiling]
     if not eligible:
-        raise SystemExit(f"every width exceeded {VRAM_CEILING_GB} GB")
+        raise SystemExit(f"every width exceeded {ceiling} GB")
 
     fastest = max(eligible, key=lambda m: m["prompts_per_second"])
-    floor = fastest["prompts_per_second"] * (1 - TOLERANCE)
+    floor = fastest["prompts_per_second"] * (1 - tolerance)
 
     for measurement in measurements:
         under = 1 - measurement["prompts_per_second"] / fastest["prompts_per_second"]
@@ -140,7 +145,7 @@ def choose_width(measurements: list[dict]) -> tuple[int, str]:
     for candidate in smaller:
         if candidate["prompts_per_second"] < floor:
             break
-        chosen, rule = candidate, f"smallest within {TOLERANCE:.0%} of the fastest"
+        chosen, rule = candidate, f"smallest within {tolerance:.0%} of the fastest"
     return chosen["width"], rule
 
 
