@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -48,3 +49,34 @@ def write_csv(path: str | Path, frame: pd.DataFrame, float_format: str | None = 
         path, index=False, lineterminator="\n", encoding="utf-8", float_format=float_format
     )
     return sha256_file(path)
+
+
+def assert_frozen_unchanged(
+    manifest_path: str | Path,
+    frozen: Mapping[str, str] | None,
+    built: Mapping[str, str],
+) -> None:
+    """Abort if a rebuild changed an artifact the committed manifest already pins.
+
+    Both mappings are ``{filename: sha256}``; ``frozen`` is ``None`` before the first
+    freeze. A build rewrites its artifacts and its manifest together, so a drifted
+    derivation would re-freeze itself with every downstream check still passing —
+    comparing against what is committed is what makes a rebuild a reproduction test.
+    """
+    if frozen is None:
+        return  # first freeze; there is nothing frozen yet
+
+    drifted = [
+        f"  {name}\n    frozen {frozen[name]}\n    built  {sha256}"
+        for name, sha256 in sorted(built.items())
+        if name in frozen and frozen[name] != sha256
+    ]
+    if drifted:
+        raise SystemExit(
+            "REBUILD CHANGED A FROZEN ARTIFACT — refusing to re-freeze:\n"
+            + "\n".join(drifted)
+            + "\n\nThe committed file on disk has been overwritten; restore it with"
+            "\n  git checkout -- data/"
+            "\nIf this change is intentional, drop the recorded hash from"
+            f"\n  {manifest_path}\nand rebuild, so re-freezing is a deliberate act."
+        )

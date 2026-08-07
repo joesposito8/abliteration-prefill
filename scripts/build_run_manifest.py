@@ -35,6 +35,7 @@ from study.datasets import (  # noqa: E402
     load_strongreject_prompts,
 )
 from study.manifest import (  # noqa: E402
+    assert_frozen_unchanged,
     rollup_sha256,
     sha256_file,
     write_csv,
@@ -189,23 +190,15 @@ def build_manifest(table: pd.DataFrame, csv_sha256: str, primary: int) -> dict:
 
 
 def assert_frozen_table_unchanged(csv_sha256: str) -> None:
-    """A rebuild that changes the frozen table must abort rather than re-freeze itself.
-
-    Every generation and every grade is keyed to the committed table, so a silent
-    re-freeze would leave finished work pointing at cells that no longer exist.
-    """
-    if not RUN_MANIFEST_JSON.exists():
-        return  # first freeze; there is nothing frozen yet
-    frozen = json.loads(RUN_MANIFEST_JSON.read_text())["table"]["sha256"]
-    if frozen != csv_sha256:
-        raise SystemExit(
-            "REBUILD CHANGED THE FROZEN MANIFEST — refusing to re-freeze:\n"
-            f"  frozen {frozen}\n  built  {csv_sha256}\n\n"
-            "The committed table on disk has been overwritten; restore it with"
-            "\n  git checkout -- data/"
-            "\nIf this change is intentional, delete"
-            f"\n  {RUN_MANIFEST_JSON}\nand rebuild, so re-freezing is a deliberate act."
-        )
+    """Every generation and every grade is keyed to the committed table, so a silent
+    re-freeze would leave finished work pointing at cells that no longer exist."""
+    frozen = None
+    if RUN_MANIFEST_JSON.exists():
+        recorded = json.loads(RUN_MANIFEST_JSON.read_text())["table"]["sha256"]
+        frozen = {RUN_MANIFEST_CSV.name: recorded}
+    assert_frozen_unchanged(
+        RUN_MANIFEST_JSON, frozen, {RUN_MANIFEST_CSV.name: csv_sha256}
+    )
 
 
 def main() -> None:

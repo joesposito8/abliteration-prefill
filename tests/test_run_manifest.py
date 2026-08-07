@@ -247,5 +247,5 @@ def test_the_committed_manifest_is_what_the_builder_produces_today(table, primar
 
 
 def test_a_rebuild_that_changed_the_table_refuses_to_re_freeze():
-    with pytest.raises(SystemExit, match="REBUILD CHANGED THE FROZEN MANIFEST"):
+    with pytest.raises(SystemExit, match="REBUILD CHANGED A FROZEN ARTIFACT"):
         manifest.assert_frozen_table_unchanged("0" * 64)

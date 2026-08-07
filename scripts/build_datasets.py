@@ -33,7 +33,13 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
 from study import SEED  # noqa: E402
-from study.manifest import sha256_bytes, sha256_file, write_csv, write_manifest  # noqa: E402
+from study.manifest import (  # noqa: E402
+    assert_frozen_unchanged,
+    sha256_bytes,
+    sha256_file,
+    write_csv,
+    write_manifest,
+)
 from study.datasets import (  # noqa: E402
     _NORMALIZERS,
     DATA_DIR,
@@ -88,30 +94,17 @@ def _fetch(url: str, expected_sha256: str) -> bytes:
 
 
 def _assert_frozen_hashes_unchanged(artifacts: dict[str, dict]) -> None:
-    """Abort if a rebuild changed an already-frozen artifact.
-
-    The build rewrites the CSVs and the manifest together, so a drifted draw would
-    re-freeze itself with every downstream check still passing. Comparing against the
-    committed manifest is what makes a rebuild a reproduction test. Catches a changed
-    derivation, not a changed source — ``_fetch`` already guards the pinned upstreams.
-    """
-    if not FREEZE_MANIFEST_JSON.exists():
-        return  # first build; there is nothing frozen yet
-    frozen = json.loads(FREEZE_MANIFEST_JSON.read_text())["artifacts"]
-    drifted = [
-        f"  {name}\n    frozen {frozen[name]['sha256']}\n    built  {meta['sha256']}"
-        for name, meta in sorted(artifacts.items())
-        if name in frozen and frozen[name]["sha256"] != meta["sha256"]
-    ]
-    if drifted:
-        raise SystemExit(
-            "REBUILD CHANGED A FROZEN ARTIFACT — refusing to re-freeze:\n"
-            + "\n".join(drifted)
-            + "\n\nThe committed CSVs on disk have been overwritten; restore them with"
-            "\n  git checkout -- data/"
-            "\nIf this change is intentional, remove the artifact's entry from"
-            f"\n  {FREEZE_MANIFEST_JSON}\nand rebuild, so re-freezing is a deliberate act."
-        )
+    """Catches a changed derivation, not a changed source — ``_fetch`` already guards
+    the pinned upstreams."""
+    frozen = None
+    if FREEZE_MANIFEST_JSON.exists():
+        recorded = json.loads(FREEZE_MANIFEST_JSON.read_text())["artifacts"]
+        frozen = {name: meta["sha256"] for name, meta in recorded.items()}
+    assert_frozen_unchanged(
+        FREEZE_MANIFEST_JSON,
+        frozen,
+        {name: meta["sha256"] for name, meta in artifacts.items()},
+    )
 
 
 def main() -> None:
