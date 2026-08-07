@@ -1,9 +1,7 @@
-"""One batched forward pass, for whichever model the caller hands in.
+"""One batched forward pass over already-rendered prompts.
 
-Nothing here knows which weights it is running: prompts arrive already rendered, and the
-decoding parameters arrive with them. Both models in the study generate through this —
-the Qwen3 target and the abliterated Gemma helper that writes its prefills — so their
-padding, seeding and decode behaviour cannot drift apart.
+The model, its tokenizer and its decoding parameters all arrive as arguments, so nothing
+here is specific to a model.
 
 Seeding. Batched sampling draws for every row from one RNG stream, so a row's text depends
 on which prompts shared its forward pass. That stream is seeded by ``batch_seed`` from the

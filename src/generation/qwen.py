@@ -1,8 +1,7 @@
 """Target-model generation: Qwen3-4B with thinking disabled, optionally prefilled.
 
 What this module holds is everything that is Qwen's own. The batched forward pass itself
-is model-agnostic and lives in :mod:`generation.batched`, which the abliterated Gemma
-helper generates through as well.
+is model-agnostic and lives in :mod:`generation.batched`.
 
 Three properties here fail silently rather than loudly, so each is enforced in code
 rather than left to the caller:
