@@ -39,7 +39,7 @@ HELPER_PROVIDER = "gemma-helper"
 # Unlike the target's, this width is not a frozen study parameter: each prefill is
 # produced once, committed and hashed, and read identically by every downstream
 # condition, so no comparison depends on the width it was produced at. Measured on the
-# card rather than assumed.
+# card: data/helper_batch_sweep.json.
 HELPER_BATCH = 16
 
 HELPER_FROZEN_CONFIG = GenerateConfig(
