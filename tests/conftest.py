@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 from generation.batched import Continuation
+from generation.gemma import MODEL_TURN_HEADER
 from generation.qwen import THINKING_SENTINEL
 
 CONTINUATION = " a continuation"
@@ -49,6 +50,26 @@ def tokenizer() -> FakeTokenizer:
     return FakeTokenizer()
 
 
+class FakeGemmaTokenizer:
+    """Renders the shape ``render_prompt`` checks for, with the template's own <bos>."""
+
+    bos_token = "<bos>"
+
+    def apply_chat_template(
+        self, messages, *, tokenize, add_generation_prompt
+    ) -> str:
+        [content] = messages[0]["content"]
+        return (
+            f"{self.bos_token}<start_of_turn>user\n{content['text']}<end_of_turn>\n"
+            f"{MODEL_TURN_HEADER}"
+        )
+
+
+@pytest.fixture
+def helper_tokenizer() -> FakeGemmaTokenizer:
+    return FakeGemmaTokenizer()
+
+
 class FakeGeneratePrompts:
     """A forward pass that records what it was asked and returns real Continuations."""
 
@@ -81,6 +102,14 @@ def fake_generate_prompts(monkeypatch) -> FakeGeneratePrompts:
     """Set ``.continuation`` to change what every row comes back with."""
     fake = FakeGeneratePrompts()
     monkeypatch.setattr("harness.provider.generate_prompts", fake)
+    return fake
+
+
+@pytest.fixture
+def fake_helper_prompts(monkeypatch) -> FakeGeneratePrompts:
+    """The same stand-in, in front of the helper provider's forward pass."""
+    fake = FakeGeneratePrompts()
+    monkeypatch.setattr("harness.helper_provider.generate_prompts", fake)
     return fake
 
 
