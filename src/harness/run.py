@@ -1,10 +1,10 @@
-"""Generate a sweep, and each of its conditions, picking up whatever an earlier attempt
+"""Run one task, or a whole sweep of conditions, picking up whatever an earlier attempt
 already finished.
 
-``eval_set`` recognises a condition's earlier log and re-runs only the samples missing
-from it, whether the earlier attempt ended in an error or was killed outright. Its
-retries are off: they are the one part of it that would decide unattended to spend GPU
-time, and a failure here is usually systematic rather than transient.
+``eval_set`` recognises an earlier log and re-runs only the samples missing from it,
+whether the earlier attempt ended in an error or was killed outright. Its retries are
+off: they are the one part of it that would decide unattended to spend GPU time, and a
+failure here is usually systematic rather than transient.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from typing import Any
 
 from abliteration import orthogonalize_, restore_targets, snapshot_targets
 from abliteration.edit import target_matrices
-from inspect_ai import eval_set
+from inspect_ai import Task, eval_set
 from inspect_ai.dataset import Dataset
 from inspect_ai.log import EvalLog
 
@@ -23,6 +23,41 @@ from .batching import BATCH
 from .conditions import Condition
 from .dataset import build_dataset
 from .task import refusal_unlock
+
+
+def run_eval_set(
+    task: Task,
+    *,
+    log_dir: str,
+    model: str,
+    module: Any,
+    tokenizer: Any,
+    label: str,
+    log_buffer: int = BATCH,
+) -> EvalLog:
+    """Run one task against a loaded model, into its own log directory.
+
+    ``max_tasks=1`` is a correctness rule and not a throughput choice: a provider holds
+    one module and one open batch, and two tasks in flight write into both.
+    """
+    success, logs = eval_set(
+        tasks=[task],
+        log_dir=log_dir,
+        model=model,
+        model_args={"module": module, "tokenizer": tokenizer},
+        score=False,
+        max_tasks=1,
+        retry_attempts=0,
+        retry_cleanup=False,
+        log_buffer=log_buffer,
+    )
+
+    if not success:
+        raise RuntimeError(
+            f"{label} did not finish: {[log.status for log in logs]}. The log is kept, "
+            "and re-running resumes from what it holds."
+        )
+    return logs[0]
 
 
 def run_condition(
@@ -35,28 +70,17 @@ def run_condition(
 ) -> EvalLog:
     """Run every sample of one condition under whatever weights ``module`` holds.
 
-    ``max_tasks=1`` is the study's rule and not a throughput choice: the module is one
-    mutable object, so two conditions in flight at once both generate under whichever
-    edit was applied last, and each log still names its own.
+    Two conditions in flight would both generate under whichever edit was applied last,
+    with each log still naming its own.
     """
-    success, logs = eval_set(
-        tasks=[refusal_unlock(dataset, seed=condition.seed)],
+    return run_eval_set(
+        refusal_unlock(dataset, seed=condition.seed),
         log_dir=condition.log_dir(root),
         model=condition.model_name,
-        model_args={"module": module, "tokenizer": tokenizer},
-        score=False,
-        max_tasks=1,
-        retry_attempts=0,
-        retry_cleanup=False,
-        log_buffer=BATCH,
+        module=module,
+        tokenizer=tokenizer,
+        label=condition.id,
     )
-
-    if not success:
-        raise RuntimeError(
-            f"{condition.id} did not finish: {[log.status for log in logs]}. The log is "
-            "kept, and re-running this condition resumes from what it holds."
-        )
-    return logs[0]
 
 
 def restore_and_verify(module, base, condition_id: str) -> None:
