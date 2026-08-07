@@ -142,7 +142,9 @@ def test_a_draw_duplicating_the_static_baseline_asks_for_a_resample(tmp_path):
 def test_a_cell_that_keeps_failing_is_settled_rather_than_asked_for_again(tmp_path):
     """After MAX_ATTEMPTS the rules give up on a cell, so it leaves the wave loop."""
     first = opening(tmp_path)
-    empty = {d.seed: "" for d in first if d.prompt_id == 0 and d.family == "fake_citation"}
+    empty = {
+        d.seed: "" for d in first if d.prompt_id == 0 and d.family == "fake_citation"
+    }
     for attempt in range(1, MAX_ATTEMPTS):
         for variant in range(VARIANTS_PER_FAMILY):
             empty[HelperDraw(0, "fake_citation", variant, attempt).seed] = ""
@@ -156,13 +158,13 @@ def test_a_cell_that_keeps_failing_is_settled_rather_than_asked_for_again(tmp_pa
 def test_a_retried_cell_settles_once_its_next_draw_lands(tmp_path):
     """Two waves end to end: an empty draw, then the retry that replaces it."""
     first = opening(tmp_path)
-    logged = drawn(first, {HelperDraw(0, "continuation_full", 0, 0): ""})
+    recorded = drawn(first, {HelperDraw(0, "continuation_full", 0, 0): ""})
 
-    _, missing = replay(logged)
+    _, missing = replay(recorded)
     assert missing == [HelperDraw(0, "continuation_full", 0, 1)]
 
-    logged |= {draw.seed: text(draw) for draw in missing}
-    results, missing = replay(logged)
+    recorded |= {draw.seed: text(draw) for draw in missing}
+    results, missing = replay(recorded)
 
     assert missing == []
     assert results[(0, "continuation_full")][0].attempts == 2

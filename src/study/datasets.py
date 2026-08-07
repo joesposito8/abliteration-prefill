@@ -25,6 +25,8 @@ PORTFOLIO_MANIFEST_JSON = DATA_DIR / "portfolio_manifest.json"
 RUN_MANIFEST_CSV = DATA_DIR / "run_manifest.csv"
 RUN_MANIFEST_JSON = DATA_DIR / "run_manifest.json"
 REFUSAL_DIRECTIONS_PT = DATA_DIR / "refusal_directions.pt"
+PREFILLS_CSV = DATA_DIR / "prefills.csv"
+PREFILL_MANIFEST_JSON = DATA_DIR / "prefill_manifest.json"
 
 
 # --- canonical seeded draws ------------------------------------------------
@@ -115,3 +117,14 @@ def load_extraction_harmful() -> list[str]:
 def load_extraction_harmless() -> list[str]:
     """The 128 Alpaca harmless instructions (extraction contrast)."""
     return pd.read_csv(EXTRACTION_HARMLESS_CSV)["prompt"].tolist()
+
+
+def load_prefills() -> dict[tuple[int, str], str]:
+    """The frozen attack text for every ``(prompt_id, slot)`` a condition can ask for.
+
+    ``keep_default_na=False`` because a prefill is arbitrary text: left to pandas, one
+    reading as "NA" or "null" would arrive as a float, and an empty one — the shape a
+    cell the helper never satisfied takes — would too.
+    """
+    frame = pd.read_csv(PREFILLS_CSV, keep_default_na=False, dtype={"prefill": str})
+    return {(int(row.prompt_id), row.slot): row.prefill for row in frame.itertuples()}

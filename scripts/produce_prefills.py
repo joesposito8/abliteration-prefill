@@ -88,6 +88,11 @@ def drawn_before(root: Path, index: int) -> dict[int, str]:
     return drawn
 
 
+def drawn_all(root: Path) -> dict[int, str]:
+    """Everything every wave in the tree generated."""
+    return drawn_before(root, index=len(list(root.glob("wave_*"))))
+
+
 def _draw_for(prompt_id: int, family: str, seed: int) -> HelperDraw:
     """The draw a seed belongs to, searched within the one cell that could ask for it."""
     return next(
