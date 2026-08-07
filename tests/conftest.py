@@ -11,7 +11,8 @@ import sys
 from types import SimpleNamespace
 
 import pytest
-from generation.qwen import DECODING, THINKING_SENTINEL, Continuation
+from generation.batched import Continuation
+from generation.qwen import THINKING_SENTINEL
 
 CONTINUATION = " a continuation"
 
@@ -60,8 +61,8 @@ class FakeGeneratePrompts:
     def rows(self) -> int:
         return sum(len(call["prompts"]) for call in self.calls)
 
-    def __call__(self, model, tok, prompts, *, seed):
-        self.calls.append({"prompts": list(prompts), "seed": seed})
+    def __call__(self, model, tok, prompts, *, seed, decoding):
+        self.calls.append({"prompts": list(prompts), "seed": seed, "decoding": decoding})
         if self.fail_after is not None and len(self.calls) > self.fail_after:
             raise RuntimeError("CUDA out of memory")
         return [

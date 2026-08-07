@@ -169,9 +169,9 @@ def edits_when_generating(
     """What the module held at each forward pass, since the log cannot record it."""
     seen: list[list[int]] = []
 
-    def recording(model, tok, prompts, *, seed):
+    def recording(model, tok, prompts, *, seed, decoding):
         seen.append(list(model.edits))
-        return fake_generate_prompts(model, tok, prompts, seed=seed)
+        return fake_generate_prompts(model, tok, prompts, seed=seed, decoding=decoding)
 
     monkeypatch.setattr("harness.batching.generate_prompts", recording)
     return seen
@@ -280,7 +280,7 @@ import sys, time
 from pathlib import Path
 sys.path[:0] = ["src", "tests"]
 from conftest import Weights, FakeTokenizer
-from generation.qwen import Continuation
+from generation.batched import Continuation
 from harness.conditions import Condition
 from harness.dataset import build_dataset
 from harness.run import run_condition
@@ -289,7 +289,7 @@ import harness.batching as batching
 calls = {"n": 0}
 
 
-def fake(model, tok, prompts, *, seed):
+def fake(model, tok, prompts, *, seed, decoding):
     calls["n"] += 1
     if calls["n"] > 2:
         Path(sys.argv[1], "READY").write_text("x")

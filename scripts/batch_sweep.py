@@ -20,12 +20,12 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
+from generation.batched import generate_prompts  # noqa: E402
 from generation.qwen import (  # noqa: E402
     DECODING,
     MODEL_ID,
     REVISION,
     build_prompt,
-    generate_prompts,
     load_model,
 )
 from harness_smoke import SYNTHETIC  # noqa: E402
@@ -70,10 +70,12 @@ def measure(model, tokenizer, prompts: list[str], width: int) -> dict:
     import torch
 
     batch = prompts[:width]
-    generate_prompts(model, tokenizer, batch, seed=SEED)
+    generate_prompts(model, tokenizer, batch, seed=SEED, decoding=DECODING)
 
     torch.cuda.reset_peak_memory_stats()
-    rows, seconds = generate_prompts(model, tokenizer, batch, seed=SEED)
+    rows, seconds = generate_prompts(
+        model, tokenizer, batch, seed=SEED, decoding=DECODING
+    )
     longest = max(row.prompt_tokens for row in rows) + DECODING["max_new_tokens"]
 
     return {

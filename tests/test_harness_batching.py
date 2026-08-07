@@ -9,7 +9,7 @@ import threading
 
 import anyio
 import pytest
-from generation.qwen import DECODING, Continuation, batch_seed
+from generation.batched import Continuation, batch_seed
 from harness.batching import BATCH, IN_FLIGHT, BatchGenerator, _Batch
 
 
@@ -27,7 +27,7 @@ def echo(prompts, seconds=0.5):
 
 
 def recording_fake(calls=None, *, fail=None):
-    def fake(model, tok, prompts, *, seed):
+    def fake(model, tok, prompts, *, seed, decoding):
         if calls is not None:
             calls.append(list(prompts))
         if fail is not None:
@@ -40,7 +40,7 @@ def recording_fake(calls=None, *, fail=None):
 def blocking_fake(calls, started, release):
     """First call blocks, so later arrivals accumulate behind it."""
 
-    def fake(model, tok, prompts, *, seed):
+    def fake(model, tok, prompts, *, seed, decoding):
         calls.append(list(prompts))
         if len(calls) == 1:
             started.set()

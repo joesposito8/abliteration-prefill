@@ -1,31 +1,31 @@
-"""Target-model generation (Qwen3-4B, thinking disabled)."""
+"""Model generation: the shared batched forward pass, and the Qwen3-4B target."""
 
+from .batched import Continuation, batch_seed, generate_prompts
 from .qwen import (
     MODEL_ID,
     REVISION,
     DECODING,
     THINKING_SENTINEL,
-    Continuation,
     Generation,
     build_prompt,
     contains_thinking,
     generate,
     generate_batch,
-    generate_prompts,
     load_model,
 )
 
 __all__ = [
+    "Continuation",
+    "batch_seed",
+    "generate_prompts",
     "MODEL_ID",
     "REVISION",
     "DECODING",
     "THINKING_SENTINEL",
-    "Continuation",
     "Generation",
     "build_prompt",
     "contains_thinking",
     "generate",
     "generate_batch",
-    "generate_prompts",
     "load_model",
 ]

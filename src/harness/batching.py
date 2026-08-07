@@ -17,7 +17,8 @@ from dataclasses import asdict, dataclass, field
 
 import anyio
 import anyio.lowlevel
-from generation.qwen import Continuation, batch_seed, generate_prompts
+from generation.batched import Continuation, batch_seed, generate_prompts
+from generation.qwen import DECODING
 
 # A memory bound: the KV cache for this many 1024-token sequences must fit alongside
 # the weights.
@@ -117,7 +118,11 @@ class BatchGenerator:
     async def _run(self, batch: _Batch) -> tuple[list[Continuation], float]:
         return await anyio.to_thread.run_sync(
             lambda: generate_prompts(
-                self._module, self._tokenizer, batch.prompts, seed=batch.seed
+                self._module,
+                self._tokenizer,
+                batch.prompts,
+                seed=batch.seed,
+                decoding=DECODING,
             )
         )
 

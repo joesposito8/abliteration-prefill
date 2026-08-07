@@ -5,7 +5,8 @@ from __future__ import annotations
 import anyio
 import pytest
 from conftest import CONTINUATION
-from generation.qwen import DECODING, Continuation
+from generation.batched import Continuation
+from generation.qwen import DECODING
 from harness.provider import FROZEN_CONFIG, IN_FLIGHT, QwenLocalAPI, split_prefill
 from inspect_ai.model import (
     ChatMessageAssistant,
@@ -220,7 +221,7 @@ def test_a_failed_forward_pass_still_reports_the_prompt(monkeypatch, tokenizer):
     """Inspect logs a raised error with no request at all, and one failed pass fails
     every member of its batch."""
 
-    def boom(model, tok, prompts, *, seed):
+    def boom(model, tok, prompts, *, seed, decoding):
         raise RuntimeError("CUDA out of memory")
 
     monkeypatch.setattr("harness.batching.generate_prompts", boom)
@@ -298,7 +299,7 @@ def test_metadata_carries_raw_continuation_and_the_pad_cut_token_count(
 def test_a_thinking_leak_is_flagged(tokenizer, monkeypatch):
     """`<think>` survives skip_special_tokens, so a leak is detectable but not visible."""
 
-    def leaky(model, tok, prompts, *, seed):
+    def leaky(model, tok, prompts, *, seed, decoding):
         text = "<think>hmm</think> ok"
         return [
             Continuation(
@@ -313,7 +314,7 @@ def test_a_thinking_leak_is_flagged(tokenizer, monkeypatch):
 
 
 def test_truncation_shows_up_as_a_stop_reason(tokenizer, monkeypatch):
-    def truncated(model, tok, prompts, *, seed):
+    def truncated(model, tok, prompts, *, seed, decoding):
         return [
             Continuation(
                 continuation="cut off",
