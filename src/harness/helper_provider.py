@@ -2,9 +2,10 @@
 
 A sibling of :class:`harness.provider.QwenLocalAPI`, not a generalisation of it. The
 helper is handed a request and continues nothing, has no reasoning block to leak, and
-renders through its own template — so parameterising the target's provider to serve it
-would add four switches that only ever take one value each. What they do share is the
-coalescer and the two config checks.
+renders through its own template. What they share is the coalescer and the plumbing in
+``provider``: the config and seed checks, and the shaping of a finished batch row into
+Inspect's output. What each keeps is its own — how a request becomes a prompt, and what
+its logs carry beyond the row.
 
 As there, the module and tokenizer arrive as ``model_args`` and serialise to ``null`` in
 the log, so construction must succeed without them and only :meth:`generate` refuses.
@@ -22,12 +23,16 @@ from inspect_ai.model import (
     ModelAPI,
     ModelCall,
     ModelOutput,
-    ModelUsage,
 )
 from inspect_ai.tool import ToolChoice, ToolInfo
 
 from .batching import BatchGenerator, in_flight
-from .provider import require_frozen_config, require_seed
+from .provider import (
+    batched_output,
+    require_frozen_config,
+    require_module,
+    require_seed,
+)
 
 HELPER_PROVIDER = "gemma-helper"
 
@@ -99,13 +104,7 @@ class GemmaHelperAPI(ModelAPI):
         message = require_one_request(input)
         require_frozen_config(config, HELPER_FROZEN_CONFIG)
         seed = require_seed(config)
-
-        if self.module is None or self.tokenizer is None:
-            raise RuntimeError(
-                f"{type(self).__name__} holds no live module. Model arguments are "
-                "recorded in the log as null, so anything rebuilt from a log arrives "
-                "weightless; pass module= and tokenizer= to the eval that generates."
-            )
+        require_module(self)
 
         prompt = render_prompt(self.tokenizer, message)
         request = {"prompt": prompt, "seed": seed, **HELPER_DECODING}
@@ -115,39 +114,7 @@ class GemmaHelperAPI(ModelAPI):
         except Exception as exc:
             return exc, ModelCall.create(request=request, response={})
 
-        output = ModelOutput.from_content(
-            model=self.model_name,
-            content=row.continuation,
-            stop_reason=(
-                "max_tokens"
-                if row.new_tokens >= HELPER_DECODING["max_new_tokens"]
-                else "stop"
-            ),
-        )
-        output.usage = ModelUsage(
-            input_tokens=row.prompt_tokens,
-            output_tokens=row.new_tokens,
-            total_tokens=row.prompt_tokens + row.new_tokens,
-        )
-        output.metadata = {
-            # The portfolio's chat-token validator matches Gemma's own control tokens,
-            # which completion has already had stripped out of it.
-            "raw_continuation": row.raw_continuation,
-            "new_tokens": row.new_tokens,
-            "prompt_tokens": row.prompt_tokens,
-            # What a batched draw is reproducible from, the seed alone not being enough.
-            "batch_seed": row.batch_seed,
-            "batch_position": row.batch_position,
-            "batch_size": row.batch_size,
-        }
-        return output, ModelCall.create(
-            request=request,
-            response={
-                "continuation": row.continuation,
-                "new_tokens": row.new_tokens,
-                "batch_seconds": row.seconds,
-            },
-        )
+        return batched_output(self.model_name, row, HELPER_DECODING, request, extra={})
 
 
 def require_one_request(input: list[ChatMessage]) -> str:

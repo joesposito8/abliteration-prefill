@@ -16,6 +16,7 @@ collide, and the second caller gets the first module.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from inspect_ai.model import (
@@ -32,7 +33,7 @@ from inspect_ai.tool import ToolChoice, ToolInfo
 from generation.batched import generate_prompts
 from generation.qwen import DECODING, build_prompt, contains_thinking
 
-from .batching import IN_FLIGHT, BatchGenerator
+from .batching import IN_FLIGHT, BatchGenerator, Row
 
 FROZEN_CONFIG = GenerateConfig(
     temperature=DECODING["temperature"],
@@ -98,13 +99,7 @@ class QwenLocalAPI(ModelAPI):
         message, prefill = split_prefill(input)
         require_frozen_config(config, FROZEN_CONFIG)
         seed = require_seed(config)
-
-        if self.module is None or self.tokenizer is None:
-            raise RuntimeError(
-                f"{type(self).__name__} holds no live module. Model arguments are "
-                "recorded in the log as null, so anything rebuilt from a log arrives "
-                "weightless; pass module= and tokenizer= to the eval that generates."
-            )
+        require_module(self)
 
         prompt = build_prompt(self.tokenizer, message, prefill)
         request = {"prompt": prompt, "prefill": prefill, "seed": seed, **DECODING}
@@ -114,40 +109,75 @@ class QwenLocalAPI(ModelAPI):
         except Exception as exc:
             return exc, ModelCall.create(request=request, response={})
 
-        output = ModelOutput.from_content(
-            model=self.model_name,
-            content=row.continuation,
-            stop_reason=(
-                "max_tokens" if row.new_tokens >= DECODING["max_new_tokens"] else "stop"
-            ),
-        )
-        output.usage = ModelUsage(
-            input_tokens=row.prompt_tokens,
-            output_tokens=row.new_tokens,
-            total_tokens=row.prompt_tokens + row.new_tokens,
-        )
-        output.metadata = {
-            # Control tokens intact, unlike completion — the leak check needs them.
-            "raw_continuation": row.raw_continuation,
-            # Cut at the pad token, so this row's own count and not the batch width.
-            "new_tokens": row.new_tokens,
-            "prompt_tokens": row.prompt_tokens,
-            "thinking_leak": contains_thinking(row.raw_continuation),
-            "prefill": prefill,
-            "response": prefill + row.continuation,
-            "seed": seed,
-            "batch_seed": row.batch_seed,
-            "batch_position": row.batch_position,
-            "batch_size": row.batch_size,
-        }
-        return output, ModelCall.create(
-            request=request,
-            response={
-                "continuation": row.continuation,
-                "new_tokens": row.new_tokens,
-                "batch_seconds": row.seconds,
+        return batched_output(
+            self.model_name,
+            row,
+            DECODING,
+            request,
+            extra={
+                "thinking_leak": contains_thinking(row.raw_continuation),
+                "prefill": prefill,
+                "response": prefill + row.continuation,
+                "seed": seed,
             },
         )
+
+
+def require_module(api: ModelAPI) -> None:
+    """Refuse to generate from a provider that was rebuilt from a log."""
+    if api.module is None or api.tokenizer is None:
+        raise RuntimeError(
+            f"{type(api).__name__} holds no live module. Model arguments are "
+            "recorded in the log as null, so anything rebuilt from a log arrives "
+            "weightless; pass module= and tokenizer= to the eval that generates."
+        )
+
+
+def batched_output(
+    model_name: str,
+    row: Row,
+    decoding: Mapping[str, object],
+    request: dict,
+    extra: dict,
+) -> tuple[ModelOutput, ModelCall]:
+    """One finished batch row as Inspect's output and call record.
+
+    ``extra`` is merged after the keys every row carries, so what a provider adds of
+    its own stays at that provider's call site rather than here.
+    """
+    output = ModelOutput.from_content(
+        model=model_name,
+        content=row.continuation,
+        stop_reason=(
+            "max_tokens" if row.new_tokens >= decoding["max_new_tokens"] else "stop"
+        ),
+    )
+    output.usage = ModelUsage(
+        input_tokens=row.prompt_tokens,
+        output_tokens=row.new_tokens,
+        total_tokens=row.prompt_tokens + row.new_tokens,
+    )
+    output.metadata = {
+        # Control tokens intact, unlike completion — the checks over generated text
+        # need them.
+        "raw_continuation": row.raw_continuation,
+        # Cut at the pad token, so this row's own count and not the batch width.
+        "new_tokens": row.new_tokens,
+        "prompt_tokens": row.prompt_tokens,
+        # What a batched row is reproducible from; its seed alone is not enough.
+        "batch_seed": row.batch_seed,
+        "batch_position": row.batch_position,
+        "batch_size": row.batch_size,
+        **extra,
+    }
+    return output, ModelCall.create(
+        request=request,
+        response={
+            "continuation": row.continuation,
+            "new_tokens": row.new_tokens,
+            "batch_seconds": row.seconds,
+        },
+    )
 
 
 def split_prefill(input: list[ChatMessage]) -> tuple[str, str]:
