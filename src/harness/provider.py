@@ -29,6 +29,7 @@ from inspect_ai.model import (
 )
 from inspect_ai.tool import ToolChoice, ToolInfo
 
+from generation.batched import generate_prompts
 from generation.qwen import DECODING, build_prompt, contains_thinking
 
 from .batching import IN_FLIGHT, BatchGenerator
@@ -69,7 +70,11 @@ class QwenLocalAPI(ModelAPI):
         )
         self.module = module
         self.tokenizer = tokenizer
-        self._batcher = BatchGenerator(module, tokenizer)
+        self._batcher = BatchGenerator(
+            lambda prompts, *, seed: generate_prompts(
+                module, tokenizer, prompts, seed=seed, decoding=DECODING
+            )
+        )
 
         if tokenizer is not None:
             # Fail on a broken chat template before any generation.

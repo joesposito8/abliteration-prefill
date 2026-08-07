@@ -173,7 +173,7 @@ def edits_when_generating(
         seen.append(list(model.edits))
         return fake_generate_prompts(model, tok, prompts, seed=seed, decoding=decoding)
 
-    monkeypatch.setattr("harness.batching.generate_prompts", recording)
+    monkeypatch.setattr("harness.provider.generate_prompts", recording)
     return seen
 
 
@@ -284,7 +284,7 @@ from generation.batched import Continuation
 from harness.conditions import Condition
 from harness.dataset import build_dataset
 from harness.run import run_condition
-import harness.batching as batching
+import harness.provider as provider
 
 calls = {"n": 0}
 
@@ -301,7 +301,7 @@ def fake(model, tok, prompts, *, seed, decoding):
     ], 0.01
 
 
-batching.generate_prompts = fake
+provider.generate_prompts = fake
 
 
 class Prefills(dict):

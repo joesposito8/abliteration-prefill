@@ -27,7 +27,7 @@ def echo(prompts, seconds=0.5):
 
 
 def recording_fake(calls=None, *, fail=None):
-    def fake(model, tok, prompts, *, seed, decoding):
+    def fake(prompts, *, seed):
         if calls is not None:
             calls.append(list(prompts))
         if fail is not None:
@@ -40,7 +40,7 @@ def recording_fake(calls=None, *, fail=None):
 def blocking_fake(calls, started, release):
     """First call blocks, so later arrivals accumulate behind it."""
 
-    def fake(model, tok, prompts, *, seed, decoding):
+    def fake(prompts, *, seed):
         calls.append(list(prompts))
         if len(calls) == 1:
             started.set()
@@ -50,12 +50,8 @@ def blocking_fake(calls, started, release):
     return fake
 
 
-def patch(monkeypatch, fake):
-    monkeypatch.setattr("harness.batching.generate_prompts", fake)
-
-
-def batcher(size=BATCH):
-    return BatchGenerator(object(), object(), size=size)
+def batcher(generate=None, size=BATCH):
+    return BatchGenerator(generate or recording_fake(), size=size)
 
 
 async def submit_all(gen, prompts, seed=1):
@@ -74,11 +70,12 @@ async def submit_all(gen, prompts, seed=1):
 # --- how batches form ------------------------------------------------------
 
 
-def test_a_full_batch_generates_together(monkeypatch):
+def test_a_full_batch_generates_together():
     calls: list = []
-    patch(monkeypatch, recording_fake(calls))
 
-    rows = anyio.run(submit_all, batcher(size=4), ["p0", "p1", "p2", "p3"])
+    rows = anyio.run(
+        submit_all, batcher(recording_fake(calls), size=4), ["p0", "p1", "p2", "p3"]
+    )
 
     assert calls == [["p0", "p1", "p2", "p3"]]
     assert [r.batch_position for r in rows] == [0, 1, 2, 3]
@@ -87,29 +84,25 @@ def test_a_full_batch_generates_together(monkeypatch):
     assert {r.batch_seed for r in rows} == {batch_seed(1, ["p0", "p1", "p2", "p3"])}
 
 
-def test_a_lone_caller_generates_immediately(monkeypatch):
+def test_a_lone_caller_generates_immediately():
     calls: list = []
-    patch(monkeypatch, recording_fake(calls))
 
-    rows = anyio.run(submit_all, batcher(size=32), ["only"])
+    rows = anyio.run(submit_all, batcher(recording_fake(calls), size=32), ["only"])
 
     assert calls == [["only"]]
     assert rows[0].batch_size == 1
 
 
-def test_every_member_gets_its_own_row(monkeypatch):
-    patch(monkeypatch, recording_fake())
-
+def test_every_member_gets_its_own_row():
     rows = anyio.run(submit_all, batcher(size=3), ["a", "b", "c"])
 
     assert [r.continuation for r in rows] == ["<a>", "<b>", "<c>"]
 
 
-def test_arrivals_during_a_forward_pass_become_the_next_batch(monkeypatch):
+def test_arrivals_during_a_forward_pass_become_the_next_batch():
     started, release = threading.Event(), threading.Event()
     calls: list = []
-    patch(monkeypatch, blocking_fake(calls, started, release))
-    gen = batcher(size=32)
+    gen = batcher(blocking_fake(calls, started, release), size=32)
     rows: dict = {}
 
     async def one(prompt):
@@ -136,11 +129,10 @@ def test_arrivals_during_a_forward_pass_become_the_next_batch(monkeypatch):
     assert rows["first"].batch_seed != rows["c"].batch_seed
 
 
-def test_a_batch_never_exceeds_the_size_cap(monkeypatch):
+def test_a_batch_never_exceeds_the_size_cap():
     started, release = threading.Event(), threading.Event()
     calls: list = []
-    patch(monkeypatch, blocking_fake(calls, started, release))
-    gen = batcher(size=3)
+    gen = batcher(blocking_fake(calls, started, release), size=3)
 
     async def main():
         async with anyio.create_task_group() as tg:
@@ -161,9 +153,8 @@ def test_a_batch_never_exceeds_the_size_cap(monkeypatch):
 # --- state across runs -----------------------------------------------------
 
 
-def test_a_run_starts_with_no_inherited_state(monkeypatch):
+def test_a_run_starts_with_no_inherited_state():
     """The same provider is memoised across evals."""
-    patch(monkeypatch, recording_fake())
     gen = batcher(size=2)
 
     first = anyio.run(submit_all, gen, ["a", "b"])
@@ -181,10 +172,9 @@ def test_no_batching_state_exists_before_a_run():
 # --- failure and cancellation ----------------------------------------------
 
 
-def test_a_failed_batch_reaches_every_member_as_an_ordinary_exception(monkeypatch):
+def test_a_failed_batch_reaches_every_member_as_an_ordinary_exception():
     boom = RuntimeError("CUDA out of memory")
-    patch(monkeypatch, recording_fake(fail=boom))
-    gen = batcher(size=3)
+    gen = batcher(recording_fake(fail=boom), size=3)
     errors: list = []
 
     async def collect(prompt):
@@ -208,12 +198,11 @@ def test_a_failed_batch_reaches_every_member_as_an_ordinary_exception(monkeypatc
     assert all(isinstance(exc, Exception) for exc in errors)
 
 
-def test_a_cancelled_caller_does_not_poison_later_samples(monkeypatch):
+def test_a_cancelled_caller_does_not_poison_later_samples():
     """Otherwise later arrivals join a batch nobody will generate."""
     started, release = threading.Event(), threading.Event()
     calls: list = []
-    patch(monkeypatch, blocking_fake(calls, started, release))
-    gen = batcher(size=8)
+    gen = batcher(blocking_fake(calls, started, release), size=8)
     rows: list = []
 
     async def quitter():
@@ -234,11 +223,10 @@ def test_a_cancelled_caller_does_not_poison_later_samples(monkeypatch):
     assert rows[0].continuation == "<innocent>"
 
 
-def test_cancelling_one_member_leaves_the_rest_intact(monkeypatch):
+def test_cancelling_one_member_leaves_the_rest_intact():
     started, release = threading.Event(), threading.Event()
     calls: list = []
-    patch(monkeypatch, blocking_fake(calls, started, release))
-    gen = batcher(size=8)
+    gen = batcher(blocking_fake(calls, started, release), size=8)
     survived: list = []
 
     async def member(prompt):
@@ -312,12 +300,11 @@ def test_a_process_ending_signal_propagates_untouched():
     assert error is None
 
 
-def test_a_seed_disagreement_is_refused(monkeypatch):
+def test_a_seed_disagreement_is_refused():
     """One seed covers a whole condition, so two in one batch means two conditions."""
     started, release = threading.Event(), threading.Event()
     calls: list = []
-    patch(monkeypatch, blocking_fake(calls, started, release))
-    gen = batcher(size=8)
+    gen = batcher(blocking_fake(calls, started, release), size=8)
     raised: list = []
 
     async def main():

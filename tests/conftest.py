@@ -80,7 +80,7 @@ class FakeGeneratePrompts:
 def fake_generate_prompts(monkeypatch) -> FakeGeneratePrompts:
     """Set ``.continuation`` to change what every row comes back with."""
     fake = FakeGeneratePrompts()
-    monkeypatch.setattr("harness.batching.generate_prompts", fake)
+    monkeypatch.setattr("harness.provider.generate_prompts", fake)
     return fake
 
 

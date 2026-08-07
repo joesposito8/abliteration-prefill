@@ -224,7 +224,7 @@ def test_a_failed_forward_pass_still_reports_the_prompt(monkeypatch, tokenizer):
     def boom(model, tok, prompts, *, seed, decoding):
         raise RuntimeError("CUDA out of memory")
 
-    monkeypatch.setattr("harness.batching.generate_prompts", boom)
+    monkeypatch.setattr("harness.provider.generate_prompts", boom)
     api = build(tokenizer=tokenizer, module=object())
 
     output, call = anyio.run(generate, api, [ChatMessageUser(content="q")], config())
@@ -307,7 +307,7 @@ def test_a_thinking_leak_is_flagged(tokenizer, monkeypatch):
             )
         ], 0.1
 
-    monkeypatch.setattr("harness.batching.generate_prompts", leaky)
+    monkeypatch.setattr("harness.provider.generate_prompts", leaky)
     api = build(tokenizer=tokenizer, module=object())
     output, _ = anyio.run(generate, api, [ChatMessageUser(content="q")], config())
     assert output.metadata["thinking_leak"] is True
@@ -324,7 +324,7 @@ def test_truncation_shows_up_as_a_stop_reason(tokenizer, monkeypatch):
             )
         ], 0.1
 
-    monkeypatch.setattr("harness.batching.generate_prompts", truncated)
+    monkeypatch.setattr("harness.provider.generate_prompts", truncated)
     api = build(tokenizer=tokenizer, module=object())
     output, _ = anyio.run(generate, api, [ChatMessageUser(content="q")], config())
     assert output.stop_reason == "max_tokens"

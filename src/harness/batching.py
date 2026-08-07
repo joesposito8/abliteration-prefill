@@ -17,16 +17,23 @@ from dataclasses import asdict, dataclass, field
 
 import anyio
 import anyio.lowlevel
-from generation.batched import Continuation, batch_seed, generate_prompts
-from generation.qwen import DECODING
+from generation.batched import Continuation, batch_seed
 
 # A memory bound: the KV cache for this many 1024-token sequences must fit alongside
 # the weights.
 BATCH = 64
 
-# The connection limiter is held across the whole provider call, so at 1x the running
-# batch owns every permit and the next one cannot assemble.
-IN_FLIGHT = 2 * BATCH
+
+def in_flight(size: int) -> int:
+    """How many callers a provider batching at ``size`` admits at once.
+
+    The connection limiter is held across the whole provider call, so at 1x the running
+    batch owns every permit and the next one cannot assemble.
+    """
+    return 2 * size
+
+
+IN_FLIGHT = in_flight(BATCH)
 
 
 @dataclass
@@ -50,11 +57,13 @@ class _Batch:
 
 
 class BatchGenerator:
-    """Gathers arriving prompts and generates them together."""
+    """Gathers arriving prompts and generates them together.
 
-    def __init__(self, module, tokenizer, *, size: int = BATCH) -> None:
-        self._module = module
-        self._tokenizer = tokenizer
+    ``generate(prompts, *, seed)`` returns ``(list[Continuation], seconds)``.
+    """
+
+    def __init__(self, generate, *, size: int = BATCH) -> None:
+        self._forward = generate
         self._size = size
         self._token = None
         self._gpu: anyio.CapacityLimiter | None = None
@@ -117,13 +126,7 @@ class BatchGenerator:
 
     async def _run(self, batch: _Batch) -> tuple[list[Continuation], float]:
         return await anyio.to_thread.run_sync(
-            lambda: generate_prompts(
-                self._module,
-                self._tokenizer,
-                batch.prompts,
-                seed=batch.seed,
-                decoding=DECODING,
-            )
+            lambda: self._forward(batch.prompts, seed=batch.seed)
         )
 
     def _rebind(self) -> None:
