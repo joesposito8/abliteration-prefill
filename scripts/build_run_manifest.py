@@ -60,8 +60,8 @@ COLUMNS = (
 )
 
 SEED_SCOPE = (
-    "one project-wide seed on every row; the per-forward-pass RNG stream is "
-    "generation.qwen.batch_seed(seed, prompts), so every batch samples independently and "
+    "one project-wide seed on every row; the per-forward-pass RNG stream is derived from "
+    "that seed and the batch's exact prompts, so every batch samples independently and "
     "matching batches of different conditions share a stream"
 )
 

@@ -37,9 +37,9 @@
     "condition": "layer_23",
     "layer": 23
   },
-  "run_sha256": "c450c315c7e9789466039f9d45a3b2bf998b6bd32d61f641c869ed747515f226",
+  "run_sha256": "0af1066c66461a1421976d51d62f9ab3eebbfff8733b95dfd58dbd823da0a6db",
   "seed": 20260724,
-  "seed_scope": "one project-wide seed on every row; the per-forward-pass RNG stream is generation.qwen.batch_seed(seed, prompts), so every batch samples independently and matching batches of different conditions share a stream",
+  "seed_scope": "one project-wide seed on every row; the per-forward-pass RNG stream is derived from that seed and the batch's exact prompts, so every batch samples independently and matching batches of different conditions share a stream",
   "table": {
     "file": "run_manifest.csv",
     "sha256": "f8c725aa15654ae61f0fda29b5a98d2481f9a132d911d0474d8ac2901170bcca"
