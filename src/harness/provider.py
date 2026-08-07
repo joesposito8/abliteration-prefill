@@ -96,7 +96,7 @@ class QwenLocalAPI(ModelAPI):
         config: GenerateConfig,
     ) -> tuple[ModelOutput | Exception, ModelCall]:
         message, prefill = split_prefill(input)
-        require_frozen_config(config)
+        require_frozen_config(config, FROZEN_CONFIG)
         seed = require_seed(config)
 
         if self.module is None or self.tokenizer is None:
@@ -172,20 +172,20 @@ def split_prefill(input: list[ChatMessage]) -> tuple[str, str]:
     return messages[0].text, prefill
 
 
-def require_frozen_config(config: GenerateConfig) -> None:
-    """Refuse a config that would generate differently from ``FROZEN_CONFIG``.
+def require_frozen_config(config: GenerateConfig, frozen: GenerateConfig) -> None:
+    """Refuse a config that would generate differently from ``frozen``.
 
     Checked at the point of use because an ``eval()`` keyword argument wins the config
-    merge. Anything this provider cannot honour is ``None`` on ``FROZEN_CONFIG``, so
+    merge. Anything the provider cannot honour is ``None`` on its frozen config, so
     setting it fails here rather than being recorded in the log header and then dropped
     on the way to the GPU.
     """
     declared = config.model_copy(update=dict.fromkeys(MAY_VARY))
-    if declared != FROZEN_CONFIG:
+    if declared != frozen:
         differing = {
-            name: (getattr(declared, name), getattr(FROZEN_CONFIG, name))
+            name: (getattr(declared, name), getattr(frozen, name))
             for name in GenerateConfig.model_fields
-            if getattr(declared, name) != getattr(FROZEN_CONFIG, name)
+            if getattr(declared, name) != getattr(frozen, name)
         }
         raise ValueError(
             "generate config does not match the frozen config "
