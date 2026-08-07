@@ -134,9 +134,12 @@ variants = produce_family("system_simulation", filled, prompt_id, generate_fn)  
 
 `produce_family` applies the frozen rules (`src/prefills/rules.py`): helper sampling
 temperature 1.0 / top_p 0.95 / top_k 64 (the full tuple is pinned so nothing leaks from
-model-config defaults), a 512-token prefill cap, up to 3 validity retries then a fixed
-fallback, and an exact within-family / vs-baseline resample-once duplicate rule. The
-actual Gemma call is injected as `generate_fn`, so the portfolio logic is offline-testable.
+model-config defaults), a 512-token prefill cap, up to 3 validity retries then the cell is
+flagged `failed` with `prefill=None`, and an exact within-family / vs-baseline duplicate
+rule with up to 3 further seeded draws. A failed cell counts as a non-unlock downstream
+rather than being substituted with a fallback string, which could spuriously unlock and
+muddy per-family results. The actual Gemma call is injected as `generate_fn`, so the
+portfolio logic is offline-testable.
 
 Freeze the portfolio (hash every prompt + rule into a manifest with one roll-up hash):
 
@@ -145,6 +148,43 @@ uv run python scripts/freeze_portfolio.py   # writes data/portfolio_manifest.jso
 ```
 
 Sources and the two documented example deviations: `data/SOURCES.md`.
+
+## Prefill production
+
+The portfolio above is templates and rules; the attack strings themselves are generated
+once by the helper and committed, because each `(prompt_id, slot)` is consumed twice — by
+the prefill-only arm on the base and by the composed arm on the primary layer. Generating
+inline would hand those two arms different attack text, and the composition-only set would
+then confound "composition unlocked it" with "a different prefill unlocked it".
+
+The rules are sequential per cell — draw, validate, retry, dedup against the variant before
+it — and a 27B helper needs breadth to be affordable. The breadth comes from across the
+1,878 cells rather than within one, so generation runs in **waves**: every cell's next draw,
+generated together. Between waves `produce_family` runs again over a `generate_fn` backed by
+what the waves have already produced, and the first draw it asks for that no wave has made
+is the next wave's work. That replay is also what settles each cell, so the frozen rules are
+applied and never restated.
+
+```bash
+# on the GPU box, detached: converges in one wave when every draw is clean
+uv run python scripts/produce_prefills.py results/prefills /dev/shm/gemma
+
+# locally, no GPU, after the wave logs are pulled back
+uv run python scripts/freeze_prefills.py results/prefills
+```
+
+The freeze writes `data/prefills.csv` (313 prompts x 13 slots = 4,069 rows: 3,756 generated
+plus the static baseline, which is a constant and is never drawn for) and
+`data/prefill_manifest.json`, whose `prefill_sha256` covers the table together with the
+helper's identity and decoding, the prompt-set hash and the portfolio hash. A rebuild that
+would change the committed table aborts rather than re-freezing itself.
+
+Reproduction is by the table's hash rather than by replaying a seed: rows sharing a forward
+pass draw from one RNG stream, so an individual row is only reproducible by replaying the
+identical batch. What `helper_seed` guarantees is narrower and still holds — an attempt is a
+different draw from the one it retries, since a retry is only ever generated in a later wave.
+
+Conditions read the frozen table through `study.datasets.load_prefills()`.
 
 ## Harness
 
@@ -217,9 +257,9 @@ _TODO — run the prefilling-vs-abliteration comparison and analyze coverage._
 ## Layout
 
 ```
-src/harness/      Inspect harness: local provider, batching, task, sweep driver
+src/harness/      Inspect harness: local providers, batching, tasks, drivers
 src/grading/      StrongREJECT rubric, parser, and the Inspect scorer
-src/generation/   target-model generation (GPU)
+src/generation/   the shared batched forward pass, the target, the helper (GPU)
 src/abliteration/ direction extraction, weight editing, the selection rule
 src/prefills/     the 13-prefill attack portfolio (helper prompts + frozen rules)
 src/study/        frozen datasets and splits, manifest hashing
