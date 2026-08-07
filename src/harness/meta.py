@@ -12,10 +12,15 @@ from __future__ import annotations
 import json
 
 from generation.qwen import MODEL_ID, REVISION
-from study.datasets import PORTFOLIO_MANIFEST_JSON
+from prefills import HELPER_MODEL, HELPER_REVISION
+from study.datasets import PORTFOLIO_MANIFEST_JSON, STRONGREJECT_CSV
 from study.manifest import sha256_file
 
 from .dataset import EVAL_SETS
+
+
+def _portfolio_sha256() -> str:
+    return json.loads(PORTFOLIO_MANIFEST_JSON.read_text())["portfolio_sha256"]
 
 
 def run_metadata(prompt_set: str) -> dict:
@@ -29,7 +34,19 @@ def run_metadata(prompt_set: str) -> dict:
         "target_revision": REVISION,
         # The prompts as read, so a CSV that drifted from its manifest is still caught.
         "prompt_set_sha256": sha256_file(EVAL_SETS[prompt_set].csv),
-        "portfolio_sha256": json.loads(PORTFOLIO_MANIFEST_JSON.read_text())[
-            "portfolio_sha256"
-        ],
+        "portfolio_sha256": _portfolio_sha256(),
+    }
+
+
+def prefill_metadata() -> dict:
+    """Goes on the prefill task, for the same reason.
+
+    Two hashes rather than one model: what a wave produced is only meaningful against
+    the portfolio whose templates it drew from and the prompt set it drew for.
+    """
+    return {
+        "helper_model": HELPER_MODEL,
+        "helper_revision": HELPER_REVISION,
+        "prompt_set_sha256": sha256_file(STRONGREJECT_CSV),
+        "portfolio_sha256": _portfolio_sha256(),
     }
