@@ -1,0 +1,17 @@
+tmp/
+.env
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Run artifacts: raw evidence kept locally, reported via the context item
+results/
+
+# Fetched label sets for scripts/grader_check.py
+.cache/
+
+# The generated attack strings. data/prefill_manifest.json carries the table's sha256,
+# so a rebuild is still checked against what the study ran on; the strings themselves
+# stay on the machine that produced them.
+data/prefills.csv

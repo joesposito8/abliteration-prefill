@@ -1,0 +1,28 @@
+{
+  "directions": {
+    "file": "refusal_directions.pt",
+    "sha256": "18747c5f7a114cbc64b4b9ddd8967615dba53ec5c0157865fbc17a40d094edfd"
+  },
+  "model": {
+    "id": "microsoft/phi-4",
+    "n_layers": 40,
+    "revision": "2db69c1c3e91a05d2c64a3185acfbaf36f744e25"
+  },
+  "primary": {
+    "band": [
+      "layer_15",
+      "layer_14"
+    ],
+    "condition": "layer_15",
+    "layer": 15,
+    "rule_path": [
+      "breadth",
+      "quality"
+    ],
+    "runner_up": "layer_14"
+  },
+  "table": {
+    "file": "layer_selection.csv",
+    "sha256": "bb6b7ebb969d8fb6a3f3f477b05418fad6e8e8ff084e93a485481e780839f781"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "directions": {
+    "file": "refusal_directions.pt",
+    "sha256": "d06e9c5c6b3f235de850d381c1878fabb0462c53118b1aa233e60e24e0fd50dc"
+  },
+  "model": {
+    "id": "Qwen/Qwen3-4B",
+    "n_layers": 36,
+    "revision": "1cfa9a7208912126459214e8b04321603b3df60c"
+  },
+  "primary": {
+    "band": [
+      "layer_23",
+      "layer_20"
+    ],
+    "condition": "layer_23",
+    "layer": 23,
+    "rule_path": [
+      "breadth",
+      "quality"
+    ],
+    "runner_up": "layer_20"
+  },
+  "table": {
+    "file": "layer_selection.csv",
+    "sha256": "56ed488a9f8224d839b2d935ba9a985d0bd7d8f290e24a5f6afff0bbff56b4f3"
+  }
+}
