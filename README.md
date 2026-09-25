@@ -4,9 +4,9 @@ Research code for a comparison of two attacks on aligned open-weight models: inf
 **prefilling**, and weight-space **abliteration**. It runs the generation sweep, grades the
 output against the StrongREJECT rubric, and computes the reported metrics.
 
-The study itself — research question, threat model, experimental design, the four reported
-metrics, grading, the analysis plan and how each outcome is to be read — is the proposal and
-design of record:
+Information on the study itself (research question, threat model, experimental design, the
+four reported metrics, grading, the analysis plan and how each outcome is to be read) is in
+the following proposal:
 
 **https://gist.github.com/joesposito8/6a2670b3c9d99df3eacd1e081d85e44e**
 
@@ -69,7 +69,7 @@ compose the two attacks or to pick a sophisticated strategy at all. What repetit
 is rescue an attack that almost never works: the unprefilled base model is still at 0.088 on
 Qwen3-4B and 0.027 on Phi-4 after ten attempts.
 
-The computed tables are in `results/analysis/` — `headline.csv`, `report.md`,
+The computed tables are in `results/analysis/`: `headline.csv`, `report.md`,
 `results-<model>.json`, `query-overlap.csv`, `budget-curves.csv`, and the `counts.csv`
 aggregate the rest derive from.
 
