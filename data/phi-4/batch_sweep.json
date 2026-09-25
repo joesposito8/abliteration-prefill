@@ -1,0 +1,82 @@
+{
+  "ceiling_gb": 69.25,
+  "chosen": 32,
+  "decoding": {
+    "do_sample": true,
+    "max_new_tokens": 1024,
+    "min_p": 0.0,
+    "temperature": 0.7,
+    "top_k": 20,
+    "top_p": 0.8
+  },
+  "did_not_fit": [
+    128
+  ],
+  "gpu": "NVIDIA A100-SXM4-80GB",
+  "measured_with_snapshot": true,
+  "model": "microsoft/phi-4",
+  "parity": {
+    "differs_at": [
+      16,
+      32,
+      64,
+      128
+    ],
+    "max_new_tokens": 128,
+    "prompts": 16,
+    "width_invariant": false
+  },
+  "rejected": [],
+  "revision": "2db69c1c3e91a05d2c64a3185acfbaf36f744e25",
+  "rule_path": [
+    "fastest_within_ceiling"
+  ],
+  "seed": 20260724,
+  "snapshot_gb": 9.75,
+  "tolerance": 0.1,
+  "torch": "2.11.0+cu128",
+  "transformers": "5.14.1",
+  "vram_reserve_gb": 10,
+  "widths": [
+    {
+      "peak_allocated_gb": 37.16453409194946,
+      "peak_vram_gb": 53.66015625,
+      "predicted_kv_gb": 0.2017974853515625,
+      "prompts_per_second": 0.13608301521897734,
+      "seconds": 7.348455634899437,
+      "tokens_per_second": 38.647576322189565,
+      "under_fastest": 0.795,
+      "width": 1
+    },
+    {
+      "peak_allocated_gb": 40.09890413284302,
+      "peak_vram_gb": 53.66015625,
+      "predicted_kv_gb": 3.89404296875,
+      "prompts_per_second": 0.47366003256450423,
+      "seconds": 33.7795019634068,
+      "tokens_per_second": 171.46493178835053,
+      "under_fastest": 0.288,
+      "width": 16
+    },
+    {
+      "peak_allocated_gb": 43.03349208831787,
+      "peak_vram_gb": 53.66015625,
+      "predicted_kv_gb": 8.0322265625,
+      "prompts_per_second": 0.6651853457002518,
+      "seconds": 48.1068926230073,
+      "tokens_per_second": 213.10875512871814,
+      "under_fastest": 0.0,
+      "width": 32
+    },
+    {
+      "peak_allocated_gb": 53.545119285583496,
+      "peak_vram_gb": 61.041015625,
+      "predicted_kv_gb": 16.064453125,
+      "prompts_per_second": 0.4205966941086509,
+      "seconds": 152.16477185022086,
+      "tokens_per_second": 135.38613273956747,
+      "under_fastest": 0.368,
+      "width": 64
+    }
+  ]
+}

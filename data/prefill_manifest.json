@@ -1,0 +1,33 @@
+{
+  "counts": {
+    "failed": 0,
+    "generated": 3756,
+    "prompts": 313,
+    "resampled_dup": 30,
+    "retried": 29,
+    "rows": 4069,
+    "slots": 13
+  },
+  "helper": {
+    "batch": 16,
+    "decoding": {
+      "do_sample": true,
+      "max_new_tokens": 512,
+      "min_p": 0.0,
+      "temperature": 1.0,
+      "top_k": 64,
+      "top_p": 0.95
+    },
+    "model": "mlabonne/gemma-3-27b-it-abliterated",
+    "revision": "eaa815dffdf0"
+  },
+  "inputs": {
+    "strongreject_dataset.csv": "4dd70357e4ff8b5d0ba5ebafecab5d6dd5633ce8046e3dd1c8bd93e64de44381"
+  },
+  "prefill_sha256": "ecc5a1e071054092b6d6d8f8d43cd798b10643dc3235491bfd54890029f26dd3",
+  "reproduction": "a prefill is reproduced from this table's sha256, not by replaying helper_seed: rows sharing a forward pass draw from one RNG stream, so an individual row is only reproducible by replaying the identical batch. helper_seed's frozen job is to make an attempt a different draw from the one it retries, which holds exactly — a retry is only ever generated in a later wave, and so in a different batch.",
+  "table": {
+    "file": "prefills.csv",
+    "sha256": "040a63d27e9aa90fc856bbba4fb523bc2332301420a05cfdf86533f4cb0aa4e9"
+  }
+}

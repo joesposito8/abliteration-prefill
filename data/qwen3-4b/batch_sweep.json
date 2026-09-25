@@ -1,0 +1,92 @@
+{
+  "ceiling_gb": 69.25,
+  "chosen": 64,
+  "decoding": {
+    "do_sample": true,
+    "max_new_tokens": 1024,
+    "min_p": 0.0,
+    "temperature": 0.7,
+    "top_k": 20,
+    "top_p": 0.8
+  },
+  "did_not_fit": [],
+  "gpu": "NVIDIA A100-SXM4-80GB",
+  "measured_with_snapshot": true,
+  "model": "Qwen/Qwen3-4B",
+  "parity": {
+    "differs_at": [
+      16,
+      32,
+      64,
+      128
+    ],
+    "max_new_tokens": 128,
+    "prompts": 16,
+    "width_invariant": false
+  },
+  "rejected": [
+    128
+  ],
+  "revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+  "rule_path": [
+    "fastest_within_ceiling"
+  ],
+  "seed": 20260724,
+  "snapshot_gb": 3.1,
+  "tolerance": 0.1,
+  "torch": "2.11.0+cu128",
+  "transformers": "5.14.1",
+  "vram_reserve_gb": 10,
+  "widths": [
+    {
+      "peak_allocated_gb": 10.643341064453125,
+      "peak_vram_gb": 23.697265625,
+      "predicted_kv_gb": 0.1459808349609375,
+      "prompts_per_second": 0.27980399763001046,
+      "seconds": 3.5739303529262543,
+      "tokens_per_second": 29.379419751151094,
+      "under_fastest": 0.509,
+      "width": 1
+    },
+    {
+      "peak_allocated_gb": 13.76887845993042,
+      "peak_vram_gb": 23.697265625,
+      "predicted_kv_gb": 2.814697265625,
+      "prompts_per_second": 0.3643775010699435,
+      "seconds": 43.91050477325916,
+      "tokens_per_second": 162.8995165720816,
+      "under_fastest": 0.36,
+      "width": 16
+    },
+    {
+      "peak_allocated_gb": 17.12727642059326,
+      "peak_vram_gb": 23.697265625,
+      "predicted_kv_gb": 5.81396484375,
+      "prompts_per_second": 0.4913877028014262,
+      "seconds": 65.12169477902353,
+      "tokens_per_second": 208.77835022775594,
+      "under_fastest": 0.137,
+      "width": 32
+    },
+    {
+      "peak_allocated_gb": 23.638929843902588,
+      "peak_vram_gb": 29.82421875,
+      "predicted_kv_gb": 11.6279296875,
+      "prompts_per_second": 0.5696736960283336,
+      "seconds": 112.3450151309371,
+      "tokens_per_second": 296.88900714576624,
+      "under_fastest": 0.0,
+      "width": 64
+    },
+    {
+      "peak_allocated_gb": 36.6630539894104,
+      "peak_vram_gb": 74.279296875,
+      "predicted_kv_gb": 23.255859375,
+      "prompts_per_second": 0.6146312693275988,
+      "seconds": 208.2549430653453,
+      "tokens_per_second": 292.78536731235164,
+      "under_fastest": -0.079,
+      "width": 128
+    }
+  ]
+}

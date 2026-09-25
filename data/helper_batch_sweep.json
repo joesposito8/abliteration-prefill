@@ -1,0 +1,63 @@
+{
+  "chosen": {
+    "mean_new_tokens": 98.0625,
+    "peak_vram_gb": 59.21107006072998,
+    "predicted_kv_gb": 9.64208984375,
+    "prompts_per_second": 0.430668937330595,
+    "seconds": 37.15150690730661,
+    "tokens_per_second": 42.23247266698148,
+    "under_fastest": 0.0,
+    "width": 16
+  },
+  "decoding": {
+    "do_sample": true,
+    "max_new_tokens": 512,
+    "min_p": 0.0,
+    "temperature": 1.0,
+    "top_k": 64,
+    "top_p": 0.95
+  },
+  "model": "mlabonne/gemma-3-27b-it-abliterated",
+  "opening_wave": {
+    "dollars": 3.8519146755331835,
+    "draws": 3756,
+    "hours": 2.422587846247285
+  },
+  "revision": "eaa815dffdf0",
+  "rule": "fastest within the memory ceiling",
+  "seed": 20260807,
+  "torch": "2.11.0+cu128",
+  "transformers": "5.14.1",
+  "widths": [
+    {
+      "mean_new_tokens": 103.0,
+      "peak_vram_gb": 55.17255449295044,
+      "predicted_kv_gb": 4.730224609375,
+      "prompts_per_second": 0.25826202953946537,
+      "seconds": 30.976291846949607,
+      "tokens_per_second": 26.600989042564933,
+      "under_fastest": 0.4,
+      "width": 8
+    },
+    {
+      "mean_new_tokens": 98.0625,
+      "peak_vram_gb": 59.21107006072998,
+      "predicted_kv_gb": 9.64208984375,
+      "prompts_per_second": 0.430668937330595,
+      "seconds": 37.15150690730661,
+      "tokens_per_second": 42.23247266698148,
+      "under_fastest": 0.0,
+      "width": 16
+    },
+    {
+      "mean_new_tokens": 113.0625,
+      "peak_vram_gb": 68.0469241142273,
+      "predicted_kv_gb": 19.87451171875,
+      "prompts_per_second": 0.3030668594960984,
+      "seconds": 105.58726233942434,
+      "tokens_per_second": 34.26549680177763,
+      "under_fastest": 0.296,
+      "width": 32
+    }
+  ]
+}

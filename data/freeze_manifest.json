@@ -1,0 +1,112 @@
+{
+  "artifacts": {
+    "extraction_harmful.csv": {
+      "rows": 128,
+      "sha256": "5581e64d58a2300357ce342af7571ef56bdbe6e3a5d92ae53a9b0c70ae7af1e8"
+    },
+    "extraction_harmless.csv": {
+      "rows": 128,
+      "sha256": "b249e8cdc340c0b277b519b9402a0eaa95a295a6d6cc29f1878cd5bdb9a932c1"
+    },
+    "harmbench_standard_behaviors.csv": {
+      "rows": 200,
+      "sha256": "36ac65056191c40899609918278d2cf303b0669d1ab22dd2fe0da16f8587929b"
+    },
+    "pilot_prompts.csv": {
+      "rows": 30,
+      "sha256": "cadfc561083e52c07efc69ee5ed9ebf982fa3b3aab1ad8fb77ca58e54ff6fd82"
+    },
+    "validation_harmful.csv": {
+      "rows": 72,
+      "sha256": "047c790f6b35952e53074ac789357d18d5833df99d37a480761bfa87aac9cd71"
+    }
+  },
+  "canonical_order": {
+    "harmbench_standard": "sorted by BehaviorID, stable (prompt_id = 0-based index)",
+    "strongreject": "file row order (prompt_id = 0-based index)"
+  },
+  "counts": {
+    "extraction_harmful": 128,
+    "extraction_harmless": 128,
+    "harmbench_standard": 200,
+    "pilot_prompts": 30,
+    "strongreject": 313,
+    "validation_harmful": 72
+  },
+  "pilot_method": "RandomState(SEED).permutation(313)[:30] (seeded-random 30 of the 313; a fixed a-priori slice, not a disjoint held-out set and not the first 30; reused as the first block of the main evaluation run)",
+  "pilot_prompt_ids": [
+    5,
+    9,
+    13,
+    16,
+    48,
+    64,
+    74,
+    77,
+    85,
+    100,
+    123,
+    124,
+    131,
+    144,
+    148,
+    154,
+    158,
+    170,
+    179,
+    202,
+    207,
+    244,
+    249,
+    257,
+    261,
+    275,
+    276,
+    298,
+    302,
+    308
+  ],
+  "rng_method": "numpy.random.RandomState (legacy MT19937); permutation over canonical order",
+  "seed": 20260724,
+  "sources": {
+    "alpaca_data.json": {
+      "sha256": "2eddafc6b977608d778aaab8dfc7e50e547b3af9826dfb9e909d9fc362e4a419",
+      "url": "https://raw.githubusercontent.com/tatsu-lab/stanford_alpaca/main/alpaca_data.json"
+    },
+    "harmbench_behaviors_text_all.csv": {
+      "sha256": "8d81accedd38eaaf8b760618622bb888417d1fd0c86eba65c427a16f1cbb4afc",
+      "url": "https://raw.githubusercontent.com/centerforaisafety/HarmBench/main/data/behavior_datasets/harmbench_behaviors_text_all.csv"
+    },
+    "strongreject_dataset.csv": {
+      "sha256": "4dd70357e4ff8b5d0ba5ebafecab5d6dd5633ce8046e3dd1c8bd93e64de44381"
+    }
+  },
+  "split_method": "RandomState(SEED).permutation(200): [:128]=extraction, [128:]=validation; non-stratified; disjoint complement within the 200 standard behaviors. Each split's prompt_id is the parent row index it was drawn at, so the two id sets partition range(200)",
+  "verbatim_exact_match_count": 0,
+  "verbatim_overlap": {
+    "extraction128_vs_strongreject313": {
+      "lower": 0,
+      "none": 0,
+      "strip": 0,
+      "strip_lower": 0
+    },
+    "harmbench200_vs_strongreject313": {
+      "lower": 0,
+      "none": 0,
+      "strip": 0,
+      "strip_lower": 0
+    },
+    "harmless128_vs_strongreject313": {
+      "lower": 0,
+      "none": 0,
+      "strip": 0,
+      "strip_lower": 0
+    },
+    "validation72_vs_strongreject313": {
+      "lower": 0,
+      "none": 0,
+      "strip": 0,
+      "strip_lower": 0
+    }
+  }
+}

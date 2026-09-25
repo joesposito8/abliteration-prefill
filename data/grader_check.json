@@ -1,0 +1,30 @@
+{
+  "checked": "StrongREJECT rubric through the Inspect grader role",
+  "inspect_ai": "0.3.251",
+  "judge": {
+    "model": "openai/gpt-4o-mini-2024-07-18",
+    "temperature": 0.0
+  },
+  "labels": {
+    "labelbox.csv": {
+      "sha256": "7a5928a4f09b4cbfce274001873ccf095510d5a990f8be52e4323d4c069fbad2",
+      "url": "https://osf.io/download/jwmqe/"
+    },
+    "labelbox_evals.csv": {
+      "sha256": "8b77df36bba0853c0763c5b651db87cc3a760d75a552df5f5cd8541bbffd413d",
+      "url": "https://osf.io/download/92s8k/"
+    }
+  },
+  "measured": {
+    "mae": 0.079,
+    "malformed": 0
+  },
+  "reference": {
+    "authors_own_grades_mae": 0.077,
+    "ported_client_mae": 0.075,
+    "published_mae": 0.077,
+    "tolerance": 0.015
+  },
+  "rows": 1361,
+  "verdict": "pass"
+}
